@@ -1,0 +1,720 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Animations and Transitions - Pro SwiftUI</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<link rel="stylesheet" href="../Assets/project.css">
+		<link rel="stylesheet" href="../Assets/prism.css">
+	</head>
+
+	<body>
+		<p style="text-align: center;"><img id="logo" src="../Assets/logo.png" alt="Pro SwiftUI" width="560" /></p>
+
+		<div id="container">
+<h1>Animations and Transitions</h1><h2>Animating the unanimatable</h2>
+<p>Almost everything can be animated in SwiftUI, although you’ll find there are quite a few things that take a little… encouragement, shall we say? </p>
+<!-- VIMEO: 787310645 11:51 -->
+<p>First the easy stuff. We can trigger an explicit animation using <code>withAnimation()</code>:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var scale = 1.0
+
+    var body: some View {
+        Text("Hello, World!")
+            .scaleEffect(scale)
+            .onTapGesture {
+                withAnimation {
+                    scale += 1
+                }
+            }
+    }
+}</code></pre>
+<p>And we can use implicit animations instead:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var scale = 1.0
+
+    var body: some View {
+        Text("Hello, World!")
+            .scaleEffect(scale)
+            .onTapGesture {
+                scale += 1
+            }
+            .animation(.default, value: scale)
+    }
+}</code></pre>
+<p><strong>Tip:</strong> Do not use implicit animations without providing the <code>value</code> parameter – that’s deprecated from iOS 15 and later because it would animate <em>every</em> change, including device rotation.</p>
+<p>But not <em>everything</em> works this way. For example, if we had several overlapping views, we might want to animate the Z index of one view:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var redAtFront = false
+    let colors: [Color] = [.blue, .green, .orange, .purple, .mint]
+
+    var body: some View {
+        VStack {
+            Button("Toggle zIndex") {
+                withAnimation(.linear(duration: 1)) {
+                    redAtFront.toggle()
+                }
+            }
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 25)
+                    .fill(.red)
+                    .zIndex(redAtFront ? 6 : 0)
+
+                ForEach(0..&lt;5) { i in
+                    RoundedRectangle(cornerRadius: 25)
+                        .fill(colors[i])
+                        .offset(x: Double(i + 1) * 20, y: Double(i + 1) * 20)
+                        .zIndex(Double(i))
+                }
+            }
+            .frame(width: 200, height: 200)
+        }
+    }
+}</code></pre>
+<p>That code is correct, but won’t work: the red box will jump to the front, despite the animation request. This is because Z index can’t be animated with SwiftUI – or at least not by default.</p>
+<p><img src="../Assets/zindex.png" alt="A group of overlapping rounded rectangles." /></p>
+<p>We can make our Z index code animate with a surprisingly small change, and the technique involved can be applied in numerous other places to animate practically anything.</p>
+<p>The key is to create a new <code>ViewModifier</code> that conforms to the <code>Animatable</code> protocol, which has the job of handling whatever you need in your your animation. So, we might write this:</p>
+<pre><code class="language-swift">struct AnimatableZIndexModifier: ViewModifier, Animatable {
+    var index: Double
+
+    func body(content: Content) -&gt; some View {
+        content
+            .zIndex(index)
+    }
+}</code></pre>
+<p><strong>Tip:</strong> The name of the view modifier is “animatable” not “animated” – we’re providing the ability for this change to be animated, but whether or not it actually <em>is</em> animated depends on how it’s used.</p>
+<p>While it’s possible to apply modifier structs directly to a view, it’s usually a better idea to wrap them in a <code>View</code> extension to make our code easier:</p>
+<pre><code class="language-swift">extension View {
+    func animatableZIndex(_ index: Double) -&gt; some View {
+        self.modifier(AnimatableZIndexModifier(index: index))
+    }
+}</code></pre>
+<p>And now rather than using <code>zIndex()</code> on the view we want to change, we use <code>animatedZIndex()</code> instead:</p>
+<pre><code class="language-swift">RoundedRectangle(cornerRadius: 25)
+    .fill(.red)
+    .animatableZIndex(redAtFront ? 6 : 0)</code></pre>
+<p>However, that still won’t work – no animation will take place.</p>
+<p>You see, all the <code>Animatable</code> protocol really does is give us the ability to read and write some kind of interpolated value over time. As we’re animating between the values 0 and 6, <code>Animatable</code> will send us values like 0.1, 1.35, 4.825, and so on, as it moves smoothly from 0 through to 6 based on whatever timing curve the animation is using. That’s all it does: it sends in the interpolated value, and it’s down to <em>us</em> to decide what should happen to it.</p>
+<p>In this case, those interpolated values are exactly what we want for our Z index, so that our view moves smoothly from Z index 0 through to 6. So, when the <code>Animatable</code> protocol attempts to provide some animating data for us, we just need to assign that to our <code>index</code> property – add this property to <code>AnimatableZIndexModifier</code> now:</p>
+<pre><code class="language-swift">var animatableData: Double {
+    get { index }
+    set { index = newValue }
+}</code></pre>
+<p>That’s it! If you run the code again you’ll see our animation works great.</p>
+<p><strong>Tip:</strong> You can just create a regular stored property called <code>animatableData</code> to get the same result, but it might result in quite clumsy code.</p>
+<p>If you’re curious, try adding a <code>print()</code> statement into the setter we just made so you can see exactly what the <code>Animatable</code> protocol is doing:</p>
+<pre><code class="language-swift">var animatableData: Double {
+    get { index }
+    set { print(newValue); index = newValue }
+}</code></pre>
+<p>When <em>that</em> runs you’ll now see all the interpolated values being passed in – it’s another feature of SwiftUI that looks like magic, but is actually surprisingly simple internally.</p>
+<p>Having this kind of control is particularly important if you need to support iOS versions below 16, because a number of things could not be animated in iOS 15.6 and below. For example, animating the system font to a new size works out of the box in iOS 16 and later, but if you need backwards compatibility it means relying on <code>Animatable</code> like this:</p>
+<pre><code class="language-swift">struct AnimatableFontModifier: ViewModifier, Animatable {
+    var size: Double
+
+    var animatableData: Double {
+        get { size }
+        set { size = newValue }
+    }
+
+    func body(content: Content) -&gt; some View {
+        content
+            .font(.system(size: size))
+    }
+}</code></pre>
+<p>Again, it’s a good idea to create a <code>View</code> extension to make it easier to use:</p>
+<pre><code class="language-swift">extension View {
+    func animatableFont(size: Double) -&gt; some View {
+        self.modifier(AnimatableFontModifier(size: size))
+    }
+}</code></pre>
+<p>And now you can create a view to use it:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var scaleUp = false
+
+    var body: some View {
+        Text("Hello, World!")
+            .animatableFont(size: scaleUp ? 56 : 24)
+            .onTapGesture {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.5)) {
+                    scaleUp.toggle()
+                }
+            }
+    }
+}</code></pre>
+<p>The result looks fantastic, but keep in mind that using it means SwiftUI has to create the system font at every size increment passed in by <code>Animatable</code> – it’s a great effect, but it’s easily overused. I’m hoping that Apple’s own solution from iOS 16 and later is somehow more optimized!</p><h2>Avoiding pain in iOS 15.6 and below</h2>
+<p>If you need to target iOS 15.6 and below (or similar versions of macOS, tvOS, and watchOS), there is one particular thing that isn’t animatable by default even though it seems like it ought to be, and that’s the <code>foregroundColor()</code> modifier.</p>
+<!-- VIMEO: 787311142 3:23 -->
+<p>This kind of code won’t work at all:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var isRed = false
+
+    var body: some View {
+        Text("Hello, World!")
+            .foregroundColor(isRed ? .red : .blue)
+            .font(.largeTitle.bold())
+            .onTapGesture {
+                withAnimation {
+                    isRed.toggle()
+                }
+            }
+    }
+}</code></pre>
+<p>We <em>could</em> go down a complex route of making it animatable, but there is no neat solution with this approach – you’d need to store both the before and after colors right inside the view you want to work with, then use the values from the <code>Animatable</code> protocol to manually interpolate between the RGBA values of those two colors.</p>
+<p>Fortunately, we can cheat a little, because the <code>colorMultiply()</code> method <em>is</em> animatable. This multiplies the original color of a view with some other color, meaning that the red value of the original is multiplied by the red value of our other color, then the green, then the blue, and then the alpha. If we use white as our original color, then multiplying by any other color will return that same color because we’re multiplying each of its components by 1.</p>
+<p>So, if we give the text a white color we can multiply over it using the colors we’re trying to animate between, like this:</p>
+<pre><code class="language-swift">Text("Hello, World!")
+    .foregroundColor(.white)
+    .colorMultiply(isRed ? .red : .blue)</code></pre>
+<p>And that <em>will</em> work, without having to go into the mess of trying to make something custom. If you wanted, you could still wrap up this behavior in a neat modifier, like this:</p>
+<pre><code class="language-swift">extension View {
+    func animatableForegroundColor(_ color: Color) -&gt; some View {
+        self
+            .foregroundColor(.white)
+            .colorMultiply(color)
+    }
+}</code></pre>
+<p>Fortunately for all of us, <code>foregroundColor()</code> <em>is</em> animatable in iOS 16.0 and later.</p><h2>Creating animated views</h2>
+<p>I said it earlier, but it bears repeating: all the <code>Animatable</code> protocol really does is give us the ability to read and write some kind of interpolated value over time. This means it isn’t restricted to <code>ViewModifier</code>, and actually works perfectly fine with a plain old <code>View</code> too.</p>
+<!-- VIMEO: 787311289 7:05 -->
+<p>As an example, we could make a view that knows how to animate a number between various values – we’d start off by making something that knows how to draw some text with a specific fraction length, like this:</p>
+<pre><code class="language-swift">struct CountingText: View, Animatable {
+    var value: Double
+    var fractionLength = 8
+
+    var body: some View {
+        Text(value.formatted(.number.precision(.fractionLength(fractionLength))))
+    }
+}</code></pre>
+<p>That’s barely doing anything, but thanks to SwiftUI the next step is trivial – how do you think we upgrade that so it supports animation?</p>
+<p>Simple: we just add an <code>animatableData</code> property to get and set <code>value</code>, like this:</p>
+<pre><code class="language-swift">var animatableData: Double {
+    get { value }
+    set { value = newValue }
+}</code></pre>
+<p>Now we can go ahead and use it just like any other view:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var value = 0.0
+
+    var body: some View {
+        CountingText(value: value)
+            .onTapGesture {
+                withAnimation(.linear) {
+                    value = Double.random(in: 1...1000)
+                }
+            }
+    }
+}</code></pre>
+<p>The point is that <code>Animatable</code> sends in whatever value should be used and it’s up to us what we do with it – we might display it immediately, we might apply it to a bunch of other modifiers, or perhaps we stash the values away for use later on.</p>
+<p>I’d like you to try it yourself: try creating a <code>TypewriterText</code> view that accepts a string to display, and is able to type it out using an animation.</p>
+<p>Have a go and see how you get on! I’ll add my solution below.</p>
+<p>The simplest solution looks like this:</p>
+<pre><code class="language-swift">struct TypewriterText: View, Animatable {
+    var string: String
+    var count = 0
+
+    var animatableData: Double {
+        get { Double(count) }
+        set { count = Int(max(0, newValue)) }
+    }
+
+    var body: some View {
+        let stringToShow = String(string.prefix(count))
+        Text(stringToShow)
+    }
+}</code></pre>
+<p>We could then use it something like this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var value = 0
+    let message = "This is a very long piece of text that appears letter by letter."
+
+    var body: some View {
+        VStack {
+            TypewriterText(string: message, count: value)
+                .frame(width: 300, alignment: .leading)
+
+            Button("Type!") {
+                withAnimation(.linear(duration: 2)) {
+                    value = message.count
+                }
+            }
+
+            Button("Reset") {
+                value = 0
+            }
+        }
+    }
+}</code></pre>
+<p>That works well, but we could improve the effect a little more by adding a hidden copy of our text inside a <code>ZStack</code>, so that SwiftUI preallocates the right amount of space for the text:</p>
+<pre><code class="language-swift">ZStack {
+    Text(string)
+        .hidden()
+        .overlay(
+            Text(stringToShow),
+            alignment: .topLeading
+        )
+}</code></pre>
+<p><img src="../Assets/typewriter.png" alt="A text being appearing letter by letter." /></p>
+<p>But we can do better! Having this typewriting effect is nice for lots of folks, but what about folks who rely on VoiceOver, or folks who have specifically asked apps to reduce the amount of animation they use? If we factor in both those we can make this view even better.</p>
+<p>First, add two properties to the view:</p>
+<pre><code class="language-swift">@Environment(\.accessibilityVoiceOverEnabled) var accessibilityVoiceOverEnabled
+@Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion</code></pre>
+<p>And now we can modify the <code>body</code> property to return two different things depending on whether we want the animation or not:</p>
+<pre><code class="language-swift">if accessibilityVoiceOverEnabled || accessibilityReduceMotion {
+    Text(string)
+} else {
+    let stringToShow = String(string.prefix(count))
+
+    ZStack {
+        Text(string)
+            .hidden()
+            .overlay(
+                Text(stringToShow),
+                alignment: .topLeading
+            )
+    }
+}</code></pre>
+<p>With that in place we have a great solution that works for <em>everyone</em>.</p><h2>Custom timing curves</h2>
+<p>SwiftUI gives us fine-grained control over how our animation movements take place: rather than relying on linear movements or ease-in-out, for example, we can instead create completely custom cubic Bézier paths that match whatever acceleration and deceleration we want.</p>
+<!-- VIMEO: 787311616 5:06 -->
+<p>For example, we could create a timing curve that very slowly around the center of an animation, but bounces hard on the edges:</p>
+<pre><code class="language-swift">extension Animation {
+    static var edgeBounce: Animation {
+        Animation.timingCurve(0, 1, 1, 0)
+    }
+
+    static func edgeBounce(duration: TimeInterval = 0.2) -&gt; Animation {
+        Animation.timingCurve(0, 1, 1, 0, duration: duration)
+    }
+}</code></pre>
+<p>Notice how I’ve added two variations of the same curve: one as a property, and one as a method that accepts a duration. This matches the same way Apple’s own timing curves are created – e.g. <code>.easeIn</code> and <code>.easeIn(duration:)</code> – so it makes it more natural to use our custom curves.</p>
+<p>With that extension in place, we can now create animations using our custom timing curve just like we would use one of the built-in curves:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var offset = -200.0
+
+    var body: some View {
+    Text("Hello, world!")
+        .offset(y: offset)
+        .animation(.edgeBounce(duration: 2).repeatForever(autoreverses: true), value: offset)
+        .onTapGesture {
+            offset = 200
+        }
+    }
+}</code></pre>
+<p>A particularly common animation curve is called “ease in out back”, which is like a double spring animation where the change goes in the wrong direction first, then moves forward normally, then overshoots the destination, then move back to the finished value. You’ll often see this in Apple’s own designs, such as the App Store: when you tap on one of their featured stories in the Today tab, the image shrinks a little, then scales up to fill the screen.</p>
+<p>We can implement this ourselves:</p>
+<pre><code class="language-swift">extension Animation {
+    static var easeInOutBack: Animation {
+        Animation.timingCurve(0.5, -0.5, 0.5, 1.5)
+    }
+
+    static func easeInOutBack(duration: TimeInterval = 0.2) -&gt; Animation {
+        Animation.timingCurve(0.5, -0.5, 0.5, 1.5, duration: duration)
+    }
+}</code></pre>
+<p>Or create a stronger effect by increasing the steepness of the curve:</p>
+<pre><code class="language-swift">static var easeInOutBackSteep: Animation {
+    Animation.timingCurve(0.7, -0.5, 0.3, 1.5)
+}
+
+static func easeInOutBackSteep(duration: TimeInterval = 0.2) -&gt; Animation {
+    Animation.timingCurve(0.7, -0.5, 0.3, 1.5, duration: duration)
+}</code></pre>
+<p>Rather than try to guess the various X/Y values for your Bézier curves, a much better idea is to use a website such as <a href="https://cubic-bezier.com">https://cubic-bezier.com</a> that lets you drag handles around visually to control exactly how the movement should work.</p>
+<p>Once you’re done, that site lets you preview the movement compared to other common curves, and provides the current parameters to input into your timing  curve code – it really is the easiest way to get the exact effect you want, and gives you lots of chance to experiment to create some unique animation effects.</p>
+<p><img src="../Assets/cubic-bezier.png" alt="The Cubic-Bezier.com website showing a visual way to design these curves." /></p><h2>Overriding animations</h2>
+<p>Animations can be triggered in all sorts of ways and places in SwiftUI, but we have API available to us that helps control the way animations happen – we can inject custom functionality into the process to get whatever specific result we’re aiming for.</p>
+<!-- VIMEO: 787311855 16:10 -->
+<p>Previously I showed you how we can make an <code>Animatable</code> view selectively disable its animations by watching the environment, but it’s not always possible to write code to bypass the animation in that way. In fact, a lot of the time you shouldn’t even be calling <code>withAnimation()</code> unless you actually want animation to happen.</p>
+<p>So, rather than having view modifiers try to override an animation request, we could write a small global function to give us more control over the process, like this:</p>
+<pre><code class="language-swift">func withMotionAnimation&lt;Result&gt;(_ animation: Animation? = .default, _ body: () throws -&gt; Result) rethrows -&gt; Result {
+    if UIAccessibility.isReduceMotionEnabled {
+        return try body()
+    } else {
+        return try withAnimation(animation, body)
+    }
+}</code></pre>
+<p>As that’s a free function, we don’t have access to the SwiftUI environment to query the current setting for reducing motion, but <code>UIAccessibility.isReduceMotionEnabled</code> works just fine. Using this approach allows us to make our intent clear: when we say <code>withAnimation()</code> we mean this is a non-movement animation such as an opacity change, whereas when we use <code>withMotionAnimation()</code> we mean this involves movement and therefore might need to be skipped based on the user’s settings.</p>
+<p>Use it like this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State var scale = 1.0
+
+    var body: some View {
+        Button("Tap Me") {
+            withMotionAnimation {
+                scale += 1
+            }
+        }
+        .scaleEffect(scale)
+    }
+}</code></pre>
+<p>That solves the problem for times when we create an explicit animation: just switch <code>withAnimation()</code> for <code>withMotionAnimation()</code> and our function takes care of the rest. But that doesn’t solve <em>implicit</em> animations like this one:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State var scale = 1.0
+
+    var body: some View {
+        Button("Tap Me") {
+            withMotionAnimation {
+                scale += 1
+            }
+        }
+        .scaleEffect(scale)
+        .animation(.default, value: scale)
+    }
+}</code></pre>
+<p>Even with <code>withMotionAnimation()</code> being used, our implicit animation will ignore the Reduce Motion setting – the implicit overrides the explicit. We could fix this by adding a new modifier that only selectively applies the animation, based on the user’s preferences:</p>
+<pre><code class="language-swift">struct MotionAnimationModifier&lt;V: Equatable&gt;: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
+
+    let animation: Animation?
+    let value: V
+
+    func body(content: Content) -&gt; some View {
+        if accessibilityReduceMotion {
+            content
+        } else {
+            content.animation(animation, value: value)
+        }
+    }
+}</code></pre>
+<p>As always, adding a <code>View</code> extension makes this much easier to use:</p>
+<pre><code class="language-swift">extension View {
+    func motionAnimation&lt;V: Equatable&gt;(_ animation: Animation?, value: V) -&gt; some View {
+        self.modifier(MotionAnimationModifier(animation: animation, value: value))
+    }
+}</code></pre>
+<p>And now we can use that to get implicit animations that automatically respect the user’s settings:</p>
+<pre><code class="language-swift">Button("Tap Me") {
+    scale += 1
+}
+.scaleEffect(scale)
+.motionAnimation(.default, value: scale)</code></pre>
+<p>That’s a big step forward, but it still only solves part of the problem: what if we need to override the implicit animation on a case-by-case basis, rather than always overriding it? That is, what if we want the default animation most of the time, but in one particular event – when a particular button is clicked, for example – we don’t want it?</p>
+<p>In this instance we need to use a <em>transaction</em>, which gives us control over what’s happening in the current animation. Transactions are SwiftUI’s stores all the context for an animation that is currently in flight, allowing it to be passed around the view hierarchy. We can create them by calling <code>withTransaction()</code> then customizing the new transaction, which is effectively what <code>withAnimation()</code> is doing – albeit with less code.</p>
+<p>In particular, what we care about is the <code>disablesAnimations</code> property of transactions, which lets us disable implicit animations that would otherwise be part of this update.</p>
+<p>So, we could disable our implicit animation like this:</p>
+<pre><code class="language-swift">Button("Tap Me") {
+    var transaction = Transaction()
+    transaction.disablesAnimations = true
+
+    withTransaction(transaction) {
+        scale += 1
+    }
+}
+.scaleEffect(scale)
+.animation(.default, value: scale)</code></pre>
+<p>That means we’ll get the default animation for all changes, except for those triggered by the button tap.</p>
+<p>This behavior is so useful that I find it best to make another global animation function to wrap it all up in one place:</p>
+<pre><code class="language-swift">func withoutAnimation&lt;Result&gt;(_ body: () throws -&gt; Result) rethrows -&gt; Result {
+    var transaction = Transaction()
+    transaction.disablesAnimations = true
+    return try withTransaction(transaction, body)
+}</code></pre>
+<p>When we use <code>withAnimation()</code> we are effectively creating a new transaction with whatever new animation we want, so I think creating this similar <code>withoutAnimation()</code> function is a great counterpart.</p>
+<p>That global function works great for the times when you want to blanket disable animations, but transactions let us go further: what if we have an implicit animation that we want to <em>override</em> – we want a different animation to happen, rather than just skipping animations entirely? Transactions are perfect here, because if set <code>disablesAnimations</code> to true we still get to apply our own animation in its place.</p>
+<p>Once again, this kind of functionality is best wrapped up in another global function for easier access:</p>
+<pre><code class="language-swift">func withHighPriorityAnimation&lt;Result&gt;(_ animation: Animation? = .default, _ body: () throws -&gt; Result) rethrows -&gt; Result {
+    var transaction = Transaction(animation: animation)
+    transaction.disablesAnimations = true
+    return try withTransaction(transaction, body)
+}</code></pre>
+<p>We can now write code like this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State var scale = 1.0
+
+    var body: some View {
+        Button("Tap Me") {
+            withHighPriorityAnimation(.linear(duration: 3)) {
+                scale += 1
+            }
+        }
+        .scaleEffect(scale)
+        .animation(.default, value: scale)
+    }
+}</code></pre>
+<p>That has a default implicit animation, but we’re explicitly overriding it with a 3-second linear animation – we get the implicit animation most of the time, but an explicit override for the times we need it.</p>
+<p>So far we have looked at:</p>
+<ul>
+<li>Disabling explicit animations based on Reduce Motion</li>
+<li>Disabling implicit animations based on Reduce Motion</li>
+<li>Disabling implicit animations on a case-by-case basis</li>
+<li>Replacing implicit animations with an explicit animation on a case-by-case basis</li>
+</ul>
+<p>But there’s one more situation you’re likely to encounter: what happens if part of your view hierarchy wants to override an animation?</p>
+<p>This is another place where transactions solve the problem for us, but this time they are applied differently: we don’t want to create a new transaction to replace our global transaction, but instead we want each view to selectively override just their part of the transaction.</p>
+<p>This is done using the <code>transaction()</code> modifier, which provides us with an <code>inout</code> transaction object to modify – we can just go ahead and modify it in place, and it will be used for any animation transactions that apply to this view.</p>
+<p><strong>Important:</strong> Apple very strongly recommends against using the <code>transaction()</code> modifier on container views, because it could generate huge amounts of work. Instead, use it on leaf views – views that don’t have any children.</p>
+<p>To demonstrate this modifier in action, here’s an example view that creates a grid of circles in either red or blue:</p>
+<pre><code class="language-swift">struct CircleGrid: View {
+    var useRedFill = false
+
+    var body: some View {
+        LazyVGrid(columns: [.init(.adaptive(minimum: 64))]) {
+            ForEach(0..&lt;30) { i in
+                Circle()
+                    .fill(useRedFill ? .red : .blue)
+                    .frame(height: 64)
+            }
+        }
+    }
+}</code></pre>
+<p>That view has no idea about animations – we haven’t added them anywhere, implicitly or explicitly, but thanks to the way SwiftUI works we can trigger an animation externally like this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State var useRedFill = false
+
+    var body: some View {
+        VStack {
+            CircleGrid(useRedFill: useRedFill)
+
+            Spacer()
+
+            Button("Toggle Color") {
+                withAnimation(.easeInOut) {
+                    useRedFill.toggle()
+                }
+            }
+        }
+    }
+}</code></pre>
+<p>Earlier I said that using <code>withAnimation()</code> effectively creates a new transaction with whatever new animation we want, and here’s where that behavior becomes important: that code says “start a new transaction, inside that set a Boolean to be true, which will cause all the circles to turn red.” That color adjustment will take place with our custom transaction in place, which means the circles will change in a particular way.</p>
+<p>Now, even though all those circles in the grid have no idea an animation is taking place, they can still exert control over any animations that <em>do</em> take place – they can examine or override any animation that affects them.</p>
+<p>For example, we could say that our circles don’t actually care what animations they have, as long as they start with a delay:</p>
+<pre><code class="language-swift">Circle()
+    .fill(useRedFill ? .red : .blue)
+    .frame(height: 64)
+    .transaction { transaction in
+        transaction.animation = transaction.animation?.delay(Double(i) / 10)
+    }</code></pre>
+<p>With that in place, any animation that happens to the circle will now happen with a delay – we haven’t touched the rest of the animation, just that one small part.</p>
+<p>The end result is quite beautiful, I think: even though the circles have no idea what kind of animation if any is taking place, we’ve now made them change color in a wave, and you can even press the Toggle Color button multiple times to move smoothly between the two states.</p><h2>Advanced transitions</h2>
+<p>SwiftUI’s transitions system allows us to customize the way views are inserted or removed, but because the built-in selection is pretty tame you’d be forgiven for thinking the transitions system isn’t that capable.</p>
+<!-- VIMEO: 787312581 29:55 -->
+<p>Well, the truth is that transitions can do pretty much whatever the heck you want with your views: you can insert a whole range of new views around whatever you’re transitioning, create local state, add complex animations, and much more.</p>
+<p>To demonstrate this I want to recreate a small but complex animation: the “heart” animation from Twitter. When you like a tweet, several things happen:</p>
+<ol>
+<li>A circle grows out from the center.</li>
+<li>That circle then shrinks from the inside out.</li>
+<li>Some colorful confetti pieces fly out from the edges of the circle.</li>
+<li>The filled heart icon springs out from the center, and bounces to its final position.</li>
+</ol>
+<p>If we take screen captures of it along the way it looks like this:</p>
+<p><img src="../Assets/heart-animation1.png" alt="Twitter’s heart animation, shown as various stop frames side by side." /></p>
+<p>Honestly, it’s best if you just try favoriting something on Twitter a few times – it’s a very fast animation, but there’s a lot going on.</p>
+<p>We can recreate this entirely with SwiftUI’s transitions, meaning that we get a simple, reusable way of adding this kind of animation to any view that is being shown.</p>
+<p>As this involves quite a few simultaneous animations, we’re going to start small and build our way up.</p>
+<p><strong>Tip:</strong> When working with complex animations like this one, I recommend you go to the simulator’s Debug menu and select Slow Animations so you can see exactly what’s happening.</p>
+<p>First, we’ll create a simple view modifier that stores three properties and renders its content unchanged. The properties are:</p>
+<ul>
+<li>The speed the animation will take place. This will be used in various places as both animation duration and delay, so having it one central place makes our code easier to follow.</li>
+<li>The color to render the effect. This will be used to render the circle and confetti.</li>
+<li>How big to draw the confetti. This is helpful if the user is bringing in a larger view, where chunkier confetti look much better.</li>
+</ul>
+<p>Add this new view modifier now:</p>
+<pre><code class="language-swift">struct ConfettiModifier: ViewModifier {
+    private let speed = 0.3
+
+    var color: Color
+    var size: Double
+
+    func body(content: Content) -&gt; some View {
+        content
+    }
+}</code></pre>
+<p>Again, that <code>body()</code> method does nothing right now – it just renders whatever it’s given, which is fine given that we’re just setting up a skeleton.</p>
+<p><img src="../Assets/heart-skeleton.png" alt="Three heart icons stacked vertically." /></p>
+<p>To make that easier to use, we’re going to extend <code>AnyTransition</code> with both a property and a method, just like SwiftUI’s own built-in transitions. The property will force default values of <code>.blue</code> and 3 for color and size, whereas the method will allow the user to customize them as needed.</p>
+<p>So, add this extension:</p>
+<pre><code class="language-swift">extension AnyTransition {
+    static var confetti: AnyTransition {
+        .modifier(
+            active: ConfettiModifier(color: .blue, size: 3),
+            identity: ConfettiModifier(color: .blue, size: 3)
+        )
+    }
+
+    static func confetti(color: Color = .blue, size: Double = 3.0) -&gt; AnyTransition {
+        AnyTransition.modifier(
+            active: ConfettiModifier(color: color, size: size),
+            identity: ConfettiModifier(color: color, size: size)
+        )
+    }
+}</code></pre>
+<p>And finally we can create a simple test view that renders an SF Symbol using three fonts, so you can see how it looks at various sizes:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var isFavorite = false
+
+    var body: some View {
+        VStack(spacing: 60) {
+            ForEach([Font.body, Font.largeTitle, Font.system(size: 72)], id: \.self) { font in
+                Button {
+                    isFavorite.toggle()
+                } label: {
+                    if isFavorite {
+                        Image(systemName: "heart.fill")
+                            .foregroundStyle(.red)
+                            .transition(.confetti(color: .red, size: 3))                            
+                    } else {
+                        Image(systemName: "heart")
+                            .foregroundStyle(.gray)
+                    }
+                }
+                .font(font)
+            }
+        }
+    }
+}</code></pre>
+<p>Okay, that’s our set up code done. You’re welcome to run it if you want but you won’t be impressed – our view modifier really does nothing at all, so it will just flip between the unfilled and filled heart symbols.</p>
+<p>That skeleton does give us a great place to build on, though, because now we can start to build up the animation step by step. If you remember, the first step in the animation is creating a circle that grows out from the center, meaning that it starts invisibly small and grows to fill all the available space and then some – it needs to be larger than the icon itself, not least because the final filled heart icon uses a spring animation and so overshoots its target size a little.</p>
+<p>To make this circle animation, we’ll start by adding a new property to <code>ConfettiModifier</code> to track the circle’s growing size, starting at a very low value:</p>
+<pre><code class="language-swift">@State private var circleSize = 0.00001</code></pre>
+<p><strong>Important:</strong> SwiftUI will complain loudly if you try to scale something to 0.0, so small values like 0.00001 are preferred.</p>
+<p>Now I’d like you to add several modifiers to the <code>content</code> line in <code>body()</code>:</p>
+<ul>
+<li>We’ll use <code>hidden()</code> to make the actual view we’re transitioning invisible, but still reserve space for it. Remember, the finished heart icon animates in separately at the very end, so we need to get the actual view out of the way.</li>
+<li>We’ll use <code>padding(10)</code> to make our circle area bigger than the view we’re transitioning, so we have space to overshoot.</li>
+<li>We’ll use <code>overlay()</code> to render the circle.</li>
+<li>We’ll use <code>padding()</code> a second time, this time with a value of -10.</li>
+<li>Finally, we’ll use <code>onAppear()</code> to start an animation to make <code>circleSize</code> 1.</li>
+</ul>
+<p>Now, you might wonder why <code>padding()</code> is in there twice, and the answer is simple: we need to add some padding before the overlay in order that the overlay is able to take up more space than our transitioning view, but we <em>don’t</em> want that padding to stick around after the overlay – we don’t want it to move over views away from our buttons. So, whatever padding we add before the overlay needs to be removed <em>after</em> the overlay, to keep things balanced.</p>
+<p>Go ahead and modify your <code>body()</code> method to this:</p>
+<pre><code class="language-swift">content
+    .hidden()
+    .padding(10)
+    .overlay(
+        // circle here
+    )
+    .padding(-10)
+    .onAppear {
+        withAnimation(.easeIn(duration: speed)) {
+            circleSize = 1
+        }
+    }</code></pre>
+<p>Now, I left out the important overlay code because it deserves its own explanation. You see, if we place a circle into our overlay it will automatically take up all the available space – it will automatically be the same size as our transitioning view, plus the 10 points of padding.</p>
+<p>This circle needs to be filled in with a color, but the <em>second</em> step in this animation is to make the circle shrink from the inside out. That is, once it has grown to its full size, it starts to become hollow, and shrinks thinner and thinner until it has finally disappeared. </p>
+<p>Getting this effect means we need to stroke our circle rather than fill it, and in particular we need to make sure the entire stroke is inside the circle, and also that the stroke width exactly is exactly half the available space so that it is always filled in completely – or least until we come to implement the hollowing out in the second animation step.</p>
+<p>Getting exactly half the available space means using a <code>GeometryReader</code>, and because we’ll be adding colorful confetti later we’ll place that inside a <code>ZStack</code>. So, replace the <code>// circle here</code> comment with this:</p>
+<pre><code class="language-swift">ZStack {
+    GeometryReader { proxy in
+        Circle()
+            .strokeBorder(color, lineWidth: proxy.size.width / 2)
+            .scaleEffect(circleSize)
+    }
+}</code></pre>
+<p>Go ahead and run the app again and you should see our first animation step is done. I know, I know, it’s pretty dull, but things get faster from here on!</p>
+<p><img src="../Assets/heart-animation2.png" alt="Three large circles have replaced our hearts." /></p>
+<p>The second animation step is where we need to hollow out our circle. This is actually pretty straightforward because we’re using <code>strokeBorder()</code>: if we reduce the <code>lineWidth</code> of our stroke it will automatically hollow out our circle for us.</p>
+<p>So, first add a new property to track how much of the stroke we want to draw:</p>
+<pre><code class="language-swift">@State private var strokeMultiplier = 1.0</code></pre>
+<p>Second, modify your <code>strokeBorder()</code> modifier to multiply the line width by that multiplier:</p>
+<pre><code class="language-swift">.strokeBorder(color, lineWidth: proxy.size.width / 2 * strokeMultiplier)</code></pre>
+<p>And finally add another <code>withAnimation()</code> call after the previous one, setting <code>strokeMultiplier</code> to a very small value:</p>
+<pre><code class="language-swift">withAnimation(.easeOut(duration: speed).delay(speed)) {
+    strokeMultiplier = 0.00001
+}</code></pre>
+<p>Notice how I’ve made that delay by <code>speed</code> seconds, so that it waits until the previous animation has completed before starting.</p>
+<p><em>Now</em> if you run the app you’ll see our animation is starting to come together!</p>
+<p><img src="../Assets/heart-animation3.png" alt="The three circles have become hollow." /></p>
+<p>The third step of our animation is to make some colorful confetti fly out from the edges of the circle. These have fairly precise movements: they start near the circle edge, move out a small amount, then disappear by shrinking away to nothing.</p>
+<p>We can get a similar effect by adding three new properties to <code>ConfettiModifier</code>: one to track whether the confetti should be visible, one to track how far the confetti has moved, and a third to track the scale of the confetti. We’ll measure movement relative to the size of our <code>GeometryReader</code>, where 1.0 will mean “the very edge of the view”.</p>
+<p>Add these three to <code>ConfettiModifier</code> now:</p>
+<pre><code class="language-swift">@State private var confettiIsHidden = true
+@State private var confettiMovement = 0.7
+@State private var confettiScale = 1.0</code></pre>
+<p>Those need to be animated to alternative values, namely false, 1.2, and 0.00001, which means adding two more <code>withAnimation()</code> calls alongside the others. These don’t need to be put in any specific order because they don’t depend on each other, but it’s generally a good idea to structure them in the order they will execute.</p>
+<p>Add these two:</p>
+<pre><code class="language-swift">withAnimation(.easeOut(duration: speed).delay(speed * 1.25)) {
+    confettiIsHidden = false
+    confettiMovement = 1.2
+}
+
+withAnimation(.easeOut(duration: speed).delay(speed * 2)) {
+    confettiScale = 0.00001
+}</code></pre>
+<p>Again, note the careful use of delays to make sure these happen at exactly the right time.</p>
+<p><em>Drawing</em> the confetti particles takes more work, and in fact this the most complicated part of the whole transition because there are lots of very precise modifiers. To make things easier to follow, I’ll break this down into small parts, starting with something easy – add this inside the <code>GeometryReader</code>, below the circle code:</p>
+<pre><code class="language-swift">ForEach(0..&lt;15) { i in
+    Circle()
+        .fill(color)
+        // more modifiers to come
+}</code></pre>
+<p>First, we need to give these circles a frame, otherwise they’ll all be huge. We already added a <code>size</code> property, but if we pass our <code>i</code> loop variable through <code>sin()</code> we’ll be able to modulate the size just a little – some confetti will be a bit bigger and some a bit smaller.</p>
+<p>Add this modifier now:</p>
+<pre><code class="language-swift">.frame(width: size + sin(Double(i)), height: size + sin(Double(i)))</code></pre>
+<p>Next, we need to scale our confetti up or down depending on the value of <code>confettiScale</code>, which is an easy one:</p>
+<pre><code class="language-swift">.scaleEffect(confettiScale)</code></pre>
+<p>Moving on, we need to move our confetti outwards as the effect animates. This means pushing our circles outwards by our radius (half the proxy width), multiplied by whatever is in <code>confettiMovement</code>. When the view is first created that will put them at 70% of the radius because <code>confettiMovement</code> has an initial value of 0.7, but our animation moves them out to 120% of the radius so they fly outwards a good distance.</p>
+<p>Now, we <em>could</em> do this using the following modifier:</p>
+<pre><code class="language-swift">.offset(x: proxy.size.width / 2 * confettiMovement)</code></pre>
+<p>That works, but’s a bit dull because every confetti piece would move exactly the same distance. To make things a bit more varied, we’re going to add some extra movement to every other piece, like this:</p>
+<pre><code class="language-swift">.offset(x: proxy.size.width / 2 * confettiMovement + (i.isMultiple(of: 2) ? size : 0))</code></pre>
+<p>It’s a small difference, but when you see the final effect I think you’ll appreciate it!</p>
+<p>At this point we’ve moved all our confetti pieces out to the side of our circle, but they are all on the <em>same</em> side. So, our next step is to rotate the circles by 24 times <code>i</code> so they spread out across the entire circle, and we’re using 24 because we have 15 circles being created – 24 x 15 is 360, which covers all the angles.</p>
+<p>Add this modifier now:</p>
+<pre><code class="language-swift">.rotationEffect(.degrees(24 * Double(i)))</code></pre>
+<p>We have just two more modifiers to go here, but the first one might be a bit confusing: we’re going to use <code>offset()</code> again.</p>
+<p>The reason for this should become clear if you break down what’s happening:</p>
+<ol>
+<li>When we create views inside a <code>GeometryReader</code> they are placed in the top-left corner.</li>
+<li>Our first <code>offset()</code> pushed our confetti views half way across the <code>GeometryReader</code> horizontally.</li>
+<li>Our <code>rotationEffect()</code> modifier caused those views to rotate around their origin, which again is the top-left corner.</li>
+<li>So our confetti views are now fanned out in a circle around the top-left corner of our <code>GeometryReader</code>.</li>
+<li>We <em>want</em> them to be centered, which means offsetting them again, this time by half the width and height of our proxy.</li>
+</ol>
+<p>Now, even though the confetti views are small, for real accuracy here we need to subtract half our confetti size from these offsets, because we want to make sure the particles are centered rather than positioned from their top-left.</p>
+<p>Add this modifier now:</p>
+<pre><code class="language-swift">.offset(x: (proxy.size.width - size) / 2, y: (proxy.size.height - size) / 2)</code></pre>
+<p>Hopefully you can see why that’s needed, but if not try commenting out the modifier once you’ve seen it working – when it’s not active it will be immediately obvious what the problem is!</p>
+<p>The final modifier is there to make sure our confetti stays hidden until we say we’re ready for it, like this:</p>
+<pre><code class="language-swift">.opacity(confettiIsHidden ? 0 : 1)</code></pre>
+<p>That completes the confetti work – if everything has gone to plan your finished code should look like this:</p>
+<pre><code class="language-swift">ForEach(0..&lt;15) { i in
+    Circle()
+        .fill(color)
+        .frame(width: size + sin(Double(i)), height: size + sin(Double(i)))
+        .scaleEffect(confettiScale)
+        .offset(x: proxy.size.width / 2 * confettiMovement + (i.isMultiple(of: 2) ? size : 0))
+        .rotationEffect(.degrees(24 * Double(i)))
+        .offset(x: (proxy.size.width - size) / 2, y: (proxy.size.height - size) / 2)
+        .opacity(confettiIsHidden ? 0 : 1)
+}</code></pre>
+<p>Go ahead and try it out and see what you think! I think the default size of 3 looks about right for the smaller buttons, but the bigger one would probably benefit from a custom size.</p>
+<p><img src="../Assets/heart-animation4.png" alt="Hollow circles with confetti particles flying out from the center." /></p>
+<p>Anyway, we still have one last step to write in order to complete the Twitter animation: our filled heart icon needs to spring out from the center, bouncing to its final position.</p>
+<p>Just like our other work, this means adding a property to track its movement, placing a view somewhere in our layout, then animating it. Start with this new property:</p>
+<pre><code class="language-swift">@State private var contentsScale = 0.00001</code></pre>
+<p>Again, using a value of 0.00001 rather than 0.0 avoids warnings from SwiftUI.</p>
+<p>The view for this is simple, because it’s just the <code>content</code> parameter that was passed into the method, albeit with a scale effect so we can animate it. Add this after the <code>GeometryReader</code> but still inside the <code>ZStack</code>:</p>
+<pre><code class="language-swift">content
+    .scaleEffect(contentsScale)</code></pre>
+<p>And now to finish off the whole effect we need to add one final <code>withAnimation()</code> call next to the others. I said earlier that it’s a good idea to structure your animation code in the order it executes, but it’s a bit trickier here because we want a spring animation rather than a specific duration. So, if I were you I’d place this in the middle of the four existing animations – after the <code>strokeMultiplier</code> animation but before the <code>confettiIsHidden</code> animation – because it has a delay that makes it fit into that spot well.</p>
+<p>Add this final code now:</p>
+<pre><code class="language-swift">withAnimation(.interpolatingSpring(stiffness: 50, damping: 5).delay(speed)) {
+    contentsScale = 1
+}</code></pre>
+<p>Now run the project again and see what you think! It’s not <em>identical</em> to Twitter’s animation, but it’s close enough that you’d be hard pressed to tell the difference unless you zoomed in close and compared the two side by side.</p>
+<p><img src="../Assets/heart-animation5.png" alt="Hollow circles with a heart on the inside and confetti particles flying out." /></p>
+<p>Yes, it did take quite a bit of code, but that’s only because there are numerous overlapping animations taking place and I’ve tried to make it fairly accurate to Twitter’s original. Hopefully it’s given you a good idea of just how powerful SwiftUI’s transitions can be – with the ability to insert  completely custom views and animations, there’s really no limit to what they can do.</p>
+<h2>Want to go further?</h2>
+<p>At this point you might well have had enough of transitions, but if you’re keen to take this to the next level there is one small but important change we can make: rather than forcing our transition to use a color, we can in fact let it use any kind of shape style including gradients.</p>
+<p>Honestly, this takes very little work to do, so give it a try!</p>
+<p>First, we need to make the modifier generic over some kind of <code>ShapeStyle</code>:</p>
+<pre><code class="language-swift">struct ConfettiModifier&lt;T: ShapeStyle&gt;: ViewModifier {</code></pre>
+<p>Second, we need to change its <code>color</code> property to be of type <code>T</code> rather than <code>Color</code>:</p>
+<pre><code class="language-swift">var color: T</code></pre>
+<p>And third we need to adjust the <code>confetti()</code> method inside our <code>AnyTransition</code> extension so that it’s also generic over some kind of <code>ShapeStyle</code>:</p>
+<pre><code class="language-swift">static func confetti&lt;T: ShapeStyle&gt;(color: T = .blue, size: Double = 3.0) -&gt; AnyTransition {</code></pre>
+<p>And that’s it – we can now transition using a much wider variety of styles. For example, rather than using <code>.red</code> for the color, we can now use this:</p>
+<pre><code class="language-swift">.transition(.confetti(color: .red.gradient))</code></pre>
+<p>Or we could provide a wholly custom gradient for something really bright:</p>
+<pre><code class="language-swift">.transition(.confetti(color: .angularGradient(colors: [.red, .yellow, .green, .blue, .purple, .red], center: .center, startAngle: .zero, endAngle: .degrees(360))))</code></pre>
+<p><img src="../Assets/heart-animation6.png" alt="Our heart animation, now with rainbow colors." /></p>		</div>
+
+		<p style="text-align: center;"><a href="../index.html">Back to Table of Contents</a></p>
+
+		<p style="text-align: center; margin-top: 40px;">Copyright &copy; 2023 Paul Hudson, <a href="http://www.hackingwithswift.com">hackingwithswift.com</a>.<br /> <a href="http://twitter.com/twostraws">You should follow me on Twitter</a>.</p>
+	</body>
+
+	<script src="../Assets/prism.js"></script>
+</html>

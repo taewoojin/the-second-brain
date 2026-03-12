@@ -1,0 +1,735 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Layout and Identity - Pro SwiftUI</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<link rel="stylesheet" href="../Assets/project.css">
+		<link rel="stylesheet" href="../Assets/prism.css">
+	</head>
+
+	<body>
+		<p style="text-align: center;"><img id="logo" src="../Assets/logo.png" alt="Pro SwiftUI" width="560" /></p>
+
+		<div id="container">
+<h1>Layout and Identity</h1><h2>Parents and children</h2>
+<p>At the core of SwiftUI is its three-step layout process, and understanding this process is the key to building great apps with SwiftUI.</p>
+<!-- VIMEO: 787307034 8:31 -->
+<p>The process is this:</p>
+<ol>
+<li>A parent view proposes a size for its child.</li>
+<li>Based on that information, the child then chooses its own size and the parent view must respect that choice.</li>
+<li>The parent view then positions the child in its coordinate space.</li>
+</ol>
+<p>It sounds so trivial, and you’re probably wondering why I’m starting out by mentioning something that is so straightforward, but the simple truth is that this simple process unlocks a huge amount of power and the more you really understand it the more you’ll be able to get SwiftUI doing exactly what you want.</p>
+<p>The key to the power is answering a simple question: what is the “parent view” in that process? When you’re learning SwiftUI, the answer seems obvious. For example:</p>
+<pre><code class="language-swift">VStack {
+    Text("Hello, world!")
+        .frame(width: 300, height: 100)
+
+    Image(systemName: "person")
+}</code></pre>
+<p>If I asked a learner what the parent of the text view was, they would probably answer “the <code>VStack</code>.” And honestly that’s a perfectly fine answer, and I wouldn’t correct a beginner who said it – it feels natural, and it fits the hierarchy we can see when the code runs. However, it’s also <em>wrong</em>, and once you have sufficient experience with SwiftUI it’s important you understand why the answer is wrong, and more importantly what is <em>right</em>.</p>
+<p>Let’s start simple: when we use any modifier in SwiftUI, we are most of the time creating a new view that wraps the original view to add some extra behavior or styling. For example, this is just one view:</p>
+<pre><code class="language-swift">Text("Hello, world!")</code></pre>
+<p>Whereas this is two views:</p>
+<pre><code class="language-swift">Text("Hello, world!")
+    .frame(width: 300, height: 100)</code></pre>
+<p>This makes sense if you break it down and keep the three-step layout process in mind: the text view <em>can’t</em> position itself, because that’s the job of the parent. So, the only way for “Hello, world!” to be aligned center in a 300x100 container is for the parent – the frame – to be that 300x100 container. This is also why we can stack many modifiers to create more complex effects: we aren’t modifying the original view again and again, but instead modifying a new view that modifies the original.</p>
+<p>Once you understand this process of creating new views using modifiers, so much of the rest of SwiftUI makes sense. This is why I repeatedly encourage folks to print out the underlying types of their views, like this:</p>
+<pre><code class="language-swift">Text("Hello, world!")
+    .frame(width: 300, height: 100)
+    .onTapGesture {
+        print(type(of: self.body))
+    }</code></pre>
+<p>When you do that, you’ll see the <code>ModifiedContent</code> type appear a lot – not exactly <em>once</em> for every modifier, because again not all modifiers create new views. <code>ModifiedContent</code> is itself a struct that conforms to the <code>View</code> protocol, and I’d like you to look it up using Open Quickly.</p>
+<p><img src="../Assets/modified-content.png" alt="The output of printing the type of self.body, showing ModifiedContent multiple times." /></p>
+<p>If you aren’t familiar with it, Open Quickly is an Xcode feature that lets you type to search through your code and also Apple’s own APIs; activate it using Shift+Cmd+O, then type ModifiedContent and press return. This will open Xcode’s generated interface file for SwiftUI, and you should be able to find this in there:</p>
+<pre><code class="language-swift">@frozen public struct ModifiedContent&lt;Content, Modifier&gt;</code></pre>
+<p>A little further down you’ll also see its <code>View</code> conformance:</p>
+<pre><code class="language-swift">extension ModifiedContent : View where Content : View, Modifier : ViewModifier {</code></pre>
+<p>These things aren’t magic, and they aren’t <em>secret</em> – you can use <code>ModifiedContent</code> directly if you want, because it’s public API. For example, back in ContentView.swift we could create a custom a modifier like this one:</p>
+<pre><code class="language-swift">struct CustomFont: ViewModifier {
+    func body(content: Content) -&gt; some View {
+        content.font(.largeTitle)
+    }
+}</code></pre>
+<p>We could apply that to some text using <code>ModifiedContent</code>, like so:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    var body: some View {
+        ModifiedContent(content: Text("Hello"), modifier: CustomFont())
+    }
+}</code></pre>
+<p>That’s obviously a lot more wordy than the normal SwiftUI code we’d write, but what I want you to understand is that the end result is <em>identical</em> to what we’d get by using <code>modifier()</code> like this:</p>
+<pre><code class="language-swift">Text("Hello")
+    .modifier(CustomFont())
+    .onTapGesture {
+        print(type(of: self.body))
+    }</code></pre>
+<p>This is what SwiftUI’s result builder does for us: it repeatedly transforms our modifiers into <code>ModifiedContent</code> views, nesting them again and again to get exactly the right result. This is all done at compile time rather than run time: the actual underlying type of these two views are identical, rather than just the finished, rendering layouts.</p>
+<p>So, when we write code like this:</p>
+<pre><code class="language-swift">Text("Hello, world!")
+    .frame(width: 300, height: 100)</code></pre>
+<p>That creates the original text view, plus a new <code>ModifiedContent</code> around it that happens to contain the fixed frame instructions. The text still has its original frame – the original size it wants to work with – but now we’ve added a second frame around it. </p>
+<p>You can see the original frame is alive and kicking by passing in a custom alignment for the outer frame:</p>
+<pre><code class="language-swift">Text("Hello, world!")
+    .frame(width: 300, height: 100, alignment: .bottomTrailing)</code></pre>
+<p>If you think about it, the only way the text can be aligned to the bottom trailing edge is if it knows its original frame. So, our text view has its own default frame that exactly matches the natural size for its text, and <em>no amount of futzing from us can ever force that text to extend its bounds beyond the natural width and height of its lines</em>.</p>
+<p>However, by applying the <code>frame()</code> modifier we’re creating a new <code>ModifiedContent</code> view around the text that takes up more space – it’s not strictly a “frame” view in its own right, but I think it’s helpful to talk about it like that.</p><h2>Fixing view sizes</h2>
+<p>SwiftUI uses a wide range of size inputs to determine the actual, final size for each one of its views.</p>
+<!-- VIMEO: 787307504 15:07 -->
+<p>Let’s look at this simple code again:</p>
+<pre><code class="language-swift">Text("Hello, world!")
+    .frame(width: 300, height: 100)</code></pre>
+<p>Like I said, despite attaching a <code>frame()</code> modifier, no amount of futzing from us can ever force that text to extend its bounds beyond the natural width and height of its lines – that’s just not how SwiftUI works.</p>
+<p>Of course, the real question here is this: what <em>is</em> the natural size for the text? Well, the answer is that text likes to live on one long line, and that’s exactly what it will do unless you ask for something else. For example, we might say that our frame had a width of only 30 rather than 300, like this:</p>
+<pre><code class="language-swift">Text("Hello, world!")
+    .frame(width: 30, height: 100)</code></pre>
+<p>Now there isn’t enough space for the text, it’s forced to wrap across several lines to fit into the tiny box we’ve allocated to it. </p>
+<p><img src="../Assets/wrapped-lines.png" alt="The words Hello World squeezed across several lines." /></p>
+<p>On the surface this sounds like it breaks the second rule of SwiftUI’s layout system: “the child chooses its own size and the parent view must respect that choice.” In this case the child is the text view and the “frame” view is its parent, so how come the text is being forced to accept the size of its parent, the frame?</p>
+<p>What’s really happening here is that all views use six values to decide how much space they want to use for layouts, and understanding how they interact is key to getting the most out of SwiftUI’s layout system.</p>
+<p>The six are:</p>
+<ul>
+<li>Minimum width and minimum height, which store the least space this view accepts. Anything lower than these values will be ignored, causing the view to “leak” out of the space that was proposed to it.</li>
+<li>Maximum width and maximum height, which store the <em>most</em> space this view accepts. Anything greater than these values will be ignored, meaning that the parent must position the view somehow inside the remaining space.</li>
+<li>Ideal width and ideal height, which store the <em>preferred</em> space that this view wants. It’s okay to provide values outside these, as long as they still lie in the range of minimum through maximum. (If you’re coming from a UIKit background, think of this as being like the intrinsic content size of your view.)</li>
+</ul>
+<p>It’s that last one that stores the natural size for our text: the text has ideal width and height suitable to store its characters on one single line, but it has no minimum size – it doesn’t care if we try to squeeze the text into a limited width, because it will automatically wrap its letters around to multiple lines.</p>
+<p>This is where the <code>fixedSize()</code> modifier comes in, which has the job of promoting a view’s ideal size to be its minimum and maximum size. It’s used like this:</p>
+<pre><code class="language-swift">Text("Hello, world!")
+    .fixedSize()
+    .frame(width: 30, height: 100)</code></pre>
+<p>When that code runs, our text will appear at its original width, despite us trying to override it. Take a moment to think about it: what do you think is actually happening internally with that code?</p>
+<p><strong>Tip:</strong> I know it’s really tempting to skip ahead and read my discussion for this question, but I promise you’ll learn more if you just pause for a moment and think of your own answer to the question: how will SwiftUI interpret that code, and in what order? Remember, the <code>fixedSize()</code> modifier create a parent view around the text, then in turn the <code>frame()</code> modifier creates parent view around the <code>fixedSize()</code>.</p>
+<p>Still here?</p>
+<p>Okay, what we end up with is this:</p>
+<ul>
+<li>We have three views in total: two <code>ModifiedContent</code> views and a <code>Text</code> view. </li>
+<li>In terms of parent-child relationships, our frame is the overall parent, and it has a fixed size view for its child, which in turn has a text view for its child.</li>
+<li>When we create a 30x100 frame, it will offer that full space to <code>fixedSize()</code> child.</li>
+<li>The view created through <code>fixedSize()</code> proposes that same size to its <code>Text</code> view.</li>
+<li>The text has no idea it’s going to be placed in a 30x100 frame, so it says, “well, my <em>ideal</em> size is 95x20, but I’m happy to take up less space if needed.”</li>
+<li>The <code>fixedSize()</code> modifier then uses that same information, except now it turns the <em>ideal</em> size into a <em>fixed</em> size – it effectively returns the equivalent of <code>self.frame(width: text.idealWidth, height: text.idealHeight)</code>.</li>
+<li>So now the frame gets told it has to position a child much bigger than the size it proposed, and does so – it doesn’t have a choice.</li>
+</ul>
+<p>So, <code>fixedSize()</code> is how we promote <em>ideal</em> size up to be <em>fixed size</em>. You can use <code>fixedSize()</code> with no parameters to get both axes fixed at the same time, or provide Boolean parameters to fix one specific axis if you prefer.</p>
+<p>In the case of text views, remember that fixing its horizontal size will default to it going over one line no matter how long its text is. If that’s what you want, great! If not, you might find that fixing only its vertical axis is more useful, because it allows the text to be squashed horizontally while still growing as tall as needed to handle its lines wrapping.</p>
+<p>But what will other view types do? Consider code like this:</p>
+<pre><code class="language-swift">Image("singapore")
+    .frame(width: 300, height: 100)</code></pre>
+<p>On its surface that appears to request a 300x100 image, but any SwiftUI veteran will know it doesn’t work like that – the image will be its original size, happily overflow the 300x100 frame we allocated for it. If you’re using Xcode’s preview canvas in selection mode you’ll be able to see the thin outline of the frame right there.</p>
+<p><img src="../Assets/no-clip.png" alt="An image exceeding its frame, which is visible as a thin blue line." /></p>
+<p>You can see it more clearly if you use the <code>clipped()</code> modifier to see what’s really happening:</p>
+<pre><code class="language-swift">Image("singapore")
+    .frame(width: 300, height: 100)
+    .clipped()</code></pre>
+<p>Perhaps now you have a better idea of what’s happening here: image views get their ideal width and height directly from the image data you load into them, and just like text views no amount of futzing from us can override that.</p>
+<p>“But Paul,” I hear you say, “surely we can override the ideal size by making the image resizable?” Nope! Again, no amount of futzing from us can override the ideal size of an image – you can see it for yourself with code like this:</p>
+<pre><code class="language-swift">Image("singapore")
+    .resizable()
+    .fixedSize()
+    .frame(width: 300, height: 100)</code></pre>
+<p>That makes the image resizable, but then promotes the ideal size into a fixed size – lo and behold, the image is back to its original size again.</p>
+<p>Earlier I said, “when we use any modifier in SwiftUI, we are most of the time creating a new view that wraps the original view to add some extra behavior or styling.”</p>
+<p>Well, <code>resizable()</code> is one of the modifiers that <em>doesn’t</em> create a new view: it sends back an image with the resizing behavior in place, but that isn’t wrapped in some kind of “resizable” modifier – all we did was tell it to have a flexible width and height, but the underlying ideal size is still there.</p>
+<p>The key here is to remember that whatever frame you try to apply to the image will automatically inherit values from the image that you don’t specifically override.</p>
+<p>For example, a common problem SwiftUI learners hit is when they use a very wide image alongside some text, like this:</p>
+<pre><code class="language-swift">VStack(alignment: .leading) {
+    Image("wide-image")
+    Text("Hello, World! This is a layout test.")
+}</code></pre>
+<p>If that image is very large compared to the device you’re using, e.g. 2000x1000, then it will stretch the width of the <code>VStack</code> beyond the edges of the screen, which will cause the text to be placed off screen too. This is rarely what you want – how would you go about fixing it?</p>
+<p><img src="../Assets/wide-image1.png" alt="An image that is so large it extends beyond the canvas, causing text below it to be invisible." /></p>
+<p>To fix this without squashing the image, the simplest thing to do is wrap it in a frame with a completely flexible width, like this:</p>
+<pre><code class="language-swift">VStack(alignment: .leading) {
+    Image("wide-image")
+        .frame(minWidth: 0, maxWidth: .infinity)
+    Text("Hello, World! This is a layout test.")
+}</code></pre>
+<p>Critically, if you remove the <code>minWidth</code> parameter there, the frame will get its minimum width from the image, which again wants to show its entire picture at its natural size. And even <em>with</em> both minimum and maximum width provided, adding <code>fixedSize()</code> afterwards shows that the ideal width and height of the image is still there!</p>
+<p><img src="../Assets/wide-image2.png" alt="An image that is so large it extends beyond the canvas, causing text below it to be invisible." /></p>
+<p>Another common problem beginners face is making two views the same width or height depending on their content. For example, they might have a layout like this:</p>
+<pre><code class="language-swift">HStack {
+    Text("Forecast")
+        .padding()
+        .background(.yellow)
+    Text("The rain in Spain falls mainly on the Spaniards")
+        .padding()
+        .background(.cyan)
+}</code></pre>
+<p>In that layout, the <code>HStack</code> proposes the available space to its children, then splits up the space based on what they sent back. In practice, the larger text view will need significantly more space than the smaller one, and when space is restricted the text will wrap – how can we make them the same size?</p>
+<p><img src="../Assets/uneven-heights1.png" alt="Two views with different heights." /></p>
+<p>Well, the <code>background()</code> modifiers will create frames using whatever size they receive from the text they wrap, but if we add a custom frame to them then the backgrounds become free to expand to fill more space:</p>
+<pre><code class="language-swift">HStack {
+    Text("Forecast")
+        .padding()
+        .frame(maxHeight: .infinity)
+        .background(.yellow)
+    Text("The rain in Spain falls mainly on the Spaniards")
+        .padding()
+        .frame(maxHeight: .infinity)            
+        .background(.cyan)
+}</code></pre>
+<p>Now, remember: even though we’ve told the background it has a flexible maximum height, we <em>haven’t</em> overridden its <em>ideal height</em> – that still comes through from the text it contains. So, each piece of text has its own ideal height that exactly fits its content, the background inherits that ideal height, and the <code>HStack</code> around it calculates its own ideal height to be the maximum of the ideal heights of the two views it contains. As the text views have infinite maximum heights and will therefore expand to fill all the available height, the <code>HStack</code> will also expand to fill all the available height.</p>
+<p>As a result, if we make the <code>HStack</code> use <code>fixedSize()</code>, we can make our two text views have the same height with very little code:</p>
+<pre><code class="language-swift">HStack {
+    Text("Forecast")
+        .padding()
+        .frame(maxHeight: .infinity)
+        .background(.yellow)
+    Text("The rain in Spain falls mainly on the Spaniards")
+        .padding()
+        .frame(maxHeight: .infinity)
+        .background(.cyan)
+}
+.fixedSize(horizontal: false, vertical: true)</code></pre>
+<p>Telling the <code>HStack</code> to fix its size is different from telling each of the text views to fix their size: we want them to resize upwards to some upper limit, which in this case is the ideal size of their container.</p>
+<p><img src="../Assets/uneven-heights2.png" alt="Two views with the same height." /></p>
+<p>In their documentation, Apple describes <code>fixedSize()</code> as “the creation of a counter proposal to the view size proposed to a view by its parent,” which is quite apt once you understand what’s happening internally.</p><h2>Layout neutrality</h2>
+<p>Not all views have a meaningful ideal size, and in fact some views have very little sizing preference at all – they will happily adapt their own size based on the way we use them alongside other views. This is called being <em>layout neutral</em>, and a view can be layout neutral for any combination of its six dimensions.</p>
+<!-- VIMEO: 787308218 9:27 -->
+<p>In its purest form, layout neutrality it looks like this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    var body: some View {
+        Color.red
+    }
+}</code></pre>
+<p>That will fill the whole space with red, because the color will occupy whatever space is available. On the other hand, we could use the color as a background:</p>
+<pre><code class="language-swift">Text("Hello, World!")
+    .background(.red)</code></pre>
+<p>Because the color doesn’t actually care how much space it takes up, it will simply read the ideal and maximum sizes from its child, the text, and use that for itself. It <em>doesn’t</em> read the minimum size because like I said earlier the text view is itself layout neutral for its minimum width and height – the text doesn’t mind being squeezed smaller, so the background color doesn’t mind either.</p>
+<p>If we wanted to describe this behavior accurately, we’d say that the background color has an ideal width, ideal height, maximum width, and maximum height, but is layout neutral for its minimum width and minimum height. In practice this means it will fit snugly around the text it wraps rather than expanding to fill all the available space, but it’s also happy to be squeezed downwards if needed.</p>
+<p>Now take a look at this code: </p>
+<pre><code class="language-swift">struct ContentView: View {
+    var body: some View {
+        Text("Hello, World!")
+            .frame(idealWidth: 300, idealHeight: 200)
+            .background(.red)
+    }
+}</code></pre>
+<p>What do you think that might do, and why? Remember to work backwards – the layout starts with <code>background(.red)</code> as the parent, and works inwards from there.</p>
+<p>Take a moment to pause and think about it before continuing.</p>
+<p>If you break it down, the flow works like this:</p>
+<ul>
+<li>The background has the whole screen to work with, and <code>Color.red</code> is completely layout neutral so it’s happy to occupy whatever is available. If this were the entirety of our layout, the color would expand to fill the screen.</li>
+<li>The background passes on the size proposal it received (the whole screen) to its child, <code>frame()</code>, which is layout neutral for minimum width, minimum height, maximum width, and maximum height. </li>
+<li>The frame proposes the whole screen to its child, the text, which is layout neutral for minimum width and minimum height, but cares very much about its ideal width, ideal height, maximum width, and maximum height.</li>
+<li>The text sends back to the frame the four values it cares about, but because the frame has provided its own ideal width and height those two are effectively ignored – the frame will use its own ideal width and height to override whatever the text asked for. However, because the frame is layout neutral for its maximum width and height, it will inherit those from the text.</li>
+<li>The frame then sends its final size up to its parent view, the background: it has the 300x200 ideal size we set, but a maximum size of whatever the text says it needs, e.g. 95x20.</li>
+<li>That 95x20 space then gets filled with the red background.</li>
+</ul>
+<p>So, it really is important to think about all six sizing values when working with layout – they combine together in really interesting ways that may not necessarily make sense at first, but if you break it all down into a sort of blow-by-blow conversation then hopefully the exact behavior will become clear.</p>
+<p>Helpfully, all six of these sizing values are <em>optional</em>, which means you can switch between layout neutrality and a fixed value by using either a number or <code>nil</code>. This is most commonly done using a ternary conditional operator, like this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var usesFixedSize = false
+
+    var body: some View {
+        VStack {
+            Text("Hello, World!")
+                .frame(width: usesFixedSize ? 300 : nil)
+                .background(.red)
+
+            Toggle("Fixed sizes", isOn: $usesFixedSize.animation())
+        }
+    }
+}       </code></pre>
+<p>What that code does at runtime depends on the value of <code>usesFixedSize</code>:</p>
+<ul>
+<li>When it’s true, the frame will propose 300 points of width to the text </li>
+<li>When it’s false, the frame will propose to the text whatever size it receives from the <code>VStack</code> – it effectively does nothing at all.</li>
+</ul>
+<p>So, if <code>nil</code> forces a view to be layout neutral for one particular dimension, what happens if we have a view that’s layout neutral for <em>every</em> dimension? We can certainly do this with the <code>frame()</code> modifier, but at some point every view has some kind of size data, even if that’s just a nominal ideal size in order to keep our layouts from exploding.</p>
+<p>To see an example of what I mean, try code like this:</p>
+<pre><code class="language-swift">ScrollView {
+    Color.red
+}</code></pre>
+<p>What size can the scroll view propose to <code>Color.red</code>?</p>
+<p>Usually <code>Color.red</code> is happy to fill all the available space, but it wouldn’t make any sense here because it would lead to an infinitely sized scroll view. In this situation, the red color will get a nominal 10-point height – enough that we can see it’s being placed, but it won’t expand beyond that.</p>
+<p><img src="../Assets/scrollview-color.png" alt="A scrollview containing a very small slice of color at the top." /></p>
+<p>You can get a better idea of what’s happening if you try attaching a frame to the color, like this:</p>
+<pre><code class="language-swift">ScrollView {
+    Color.red
+        .frame(minWidth: nil, idealWidth: nil, maxWidth: nil, minHeight: nil, idealHeight: nil, maxHeight: 400)
+    }
+}</code></pre>
+<p>We’re now explicitly giving the color a maximum height to work with, but it won’t matter – it will still stay 10 points high, because our frame is layout neutral for its ideal height. This isn’t just that the color remains small while the frame grows empty around it, which you can see if you try coloring the frame blue:</p>
+<pre><code class="language-swift">ScrollView {
+    Color.red
+        .frame(minWidth: nil, idealWidth: nil, maxWidth: nil, minHeight: nil, idealHeight: nil, maxHeight: 400)
+        .background(.blue)
+    }
+}</code></pre>
+<p>You won’t see any background there, because the frame still has an ideal height matching the color it contains. In order to get the color to expand, we need to override its ideal height in its frame parent, like this:</p>
+<pre><code class="language-swift">ScrollView {
+    Color.red
+        .frame(minWidth: nil, idealWidth: nil, maxWidth: nil, minHeight: nil, idealHeight: 400, maxHeight: 400)
+    }
+}</code></pre>
+<p>Now the red color will expand to be 400 points high – internally the color has an infinite maximum height but gets capped to the 400 points it is offered by the frame, but now the frame <em>won’t</em> adopt the 10-point ideal height of the color and will instead use 400 points so that the color can grow freely.</p><h2>Multiple frames</h2>
+<p>Many SwiftUI modifiers can be stacked to create interesting effects, such as perhaps adding multiple backgrounds to some text.</p>
+<!-- VIMEO: 787308638 3:38 -->
+<p>So, we could add two frames and two background colors to some text, like this:</p>
+<pre><code class="language-swift">Text("Hello, World!")
+    .frame(width: 200, height: 200)
+    .background(.blue)
+    .frame(width: 300, height: 300)
+    .background(.red)
+    .foregroundColor(.white)</code></pre>
+<p><img src="../Assets/multiple-frames1.png" alt="Two colored boxes, one inside the other, with Hello World in the center." /></p>
+<p>However, it’s possible and indeed common to apply a <code>frame()</code> modifier twice back to back – with no other modifiers in between. This is because SwiftUI separates the concepts of fixed frames and flexible frames: a single view can have a fixed width or height, <em>or</em> it can have flexible dimensions provided, but it can’t have both.</p>
+<p>Of course, often we <em>do</em> want both. For example, if you were designing a macOS app you might say want a fixed width for part of your UI, but have a minimum height so that users can’t make the window really tiny:</p>
+<pre><code class="language-swift">Text("Hello, World!")
+    .frame(width: 250)
+    .frame(minHeight: 400)</code></pre>
+<p>I don’t want to sound like a broken record, but remember the golden rule here: no amount of futzing from us can ever force that text to extend its bounds beyond the natural width and height of its lines. We aren’t making the text flexible at all, because it isn’t possible. Instead, we’re wrapping it in a new view that has a fixed width of 250 points, then wrapping <em>that</em> in another new view that has a flexible height of at least 400 points.</p>
+<p>The best way to check your understanding is correct is to look at code like this:</p>
+<pre><code class="language-swift">Text("Hello, World!")
+    .frame(width: 250)
+    .frame(minWidth: 400)</code></pre>
+<p>What do you think that will do when run? It sounds like we’re giving SwiftUI completely contradictory instructions, but we really aren’t, and hopefully the answer becomes clear if you try to think like SwiftUI does.</p>
+<p>Again, pause for a moment and think it through to decide for yourself before I walk you through what actually happens.</p>
+<p>Still here? Okay:</p>
+<ul>
+<li>Our text has an ideal width and height matching its contents.</li>
+<li>We place that inside a frame that is 250 points wide.</li>
+<li>We place <em>that</em> frame inside <em>another</em> frame that is at least 400 points.</li>
+</ul>
+<p>So, there is no contradiction at all, and if you try adding background colors after the text and each frame you’ll see exactly what’s happening:</p>
+<pre><code class="language-swift">Text("Hello, World!")
+    .background(.blue)
+    .frame(width: 250)
+    .background(.red)
+    .frame(minWidth: 400)
+    .background(.yellow)</code></pre>
+<p><img src="../Assets/multiple-frames2.png" alt="Hello World centered in a blue rectangle, with a red rectangle around it, and a yellow rectangle on the outside." /></p><h2>Inside TupleView</h2>
+<p>You’ve seen how using modifiers with a single view gets transformed by <code>@ViewBuilder</code> into nested <code>ModifiedContent</code> views, but the other side of this coin is how Swift handles multiple views. </p>
+<!-- VIMEO: 787308779 10:29 -->
+<p>Try this:</p>
+<pre><code class="language-swift">VStack {
+    Text("Hello")
+    Text("World")
+}
+.onTapGesture {
+    print(type(of: self.body))
+}</code></pre>
+<p>When that runs, you’ll see the type is <code>ModifiedContent&lt;VStack&lt;TupleView&lt;(Text, Text)&gt;&gt;, AddGestureModifier&lt;_EndedGesture&lt;TapGesture&gt;&gt;&gt;</code>, but really the important part in all that is <code>TupleView&lt;(Text, Text)&gt;</code> because that’s how SwiftUI encodes multiple views: a special view type that accepts other views inside it.</p>
+<p><code>TupleView</code> isn’t underscored, which means it’s public API, and I encourage folks to look it up using Open Quickly because it explains one of the key restrictions in SwiftUI. If you look for where <code>TupleView</code> is used, sooner or later you’ll find this:</p>
+<pre><code class="language-swift">public static func buildBlock&lt;C0, C1, C2, C3, C4, C5, C6, C7, C8, C9&gt;(_ c0: C0, _ c1: C1, _ c2: C2, _ c3: C3, _ c4: C4, _ c5: C5, _ c6: C6, _ c7: C7, _ c8: C8, _ c9: C9) -&gt; TupleView&lt;(C0, C1, C2, C3, C4, C5, C6, C7, C8, C9)&gt; where C0 : View, C1 : View, C2 : View, C3 : View, C4 : View, C5 : View, C6 : View, C7 : View, C8 : View, C9 : View</code></pre>
+<p>That’s a generic result builder method that accepts 10 views, and you’ll also find alternatives that accept 9 views, 8 views, and so on – but, critically, you won’t find one that accepts 11 views, which is why SwiftUI isn’t able to statically represent more than 10 views in its type system. (If you look for other examples of <code>buildBlock</code> you’ll see there are some examples that are significantly more complex – see <code>TableColumnBuilder</code> for a real eye opener!)</p>
+<p><img src="../Assets/tupleview.png" alt="A small slice of SwiftUI’s generated interface, showing many versions of buildBlock." /></p>
+<p>There’s no software restriction making 10 a hard limit, instead it’s a pragmatic choice by the SwiftUI team: they need to draw a limit <em>somewhere</em>, and 10 is a reasonable amount. If you wanted, you could use Open Quickly to look for <code>buildBlock</code> in SwiftUI’s generated interface, then copy it into your own code and add to it to allow 11 views, like this:</p>
+<pre><code class="language-swift">extension ViewBuilder {
+    public static func buildBlock&lt;C0, C1, C2, C3, C4, C5, C6, C7, C8, C9, C10&gt;(_ c0: C0, _ c1: C1, _ c2: C2, _ c3: C3, _ c4: C4, _ c5: C5, _ c6: C6, _ c7: C7, _ c8: C8, _ c9: C9, _ c10: C10) -&gt; TupleView&lt;(C0, C1, C2, C3, C4, C5, C6, C7, C8, C9, C10)&gt; where C0 : View, C1 : View, C2 : View, C3 : View, C4 : View, C5 : View, C6 : View, C7 : View, C8 : View, C9 : View, C10 : View {
+        TupleView((c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10))
+    }
+}</code></pre>
+<p>That uses 11 different views, so now you’ll find you can include 11 children inside any container. Heck, you could even just create a <code>TupleView</code> directly whenever you needed using as many views as you want, like this:</p>
+<pre><code class="language-swift">TupleView((
+    Text("1"),
+    Text("2"),
+    Text("3"),
+    Text("4"),
+    Text("5"),
+    Text("6"),
+    Text("7"),
+    Text("8"),
+    Text("9"),
+    Text("10"),
+    Text("11"),
+    Text("12"),
+    Text("13"),
+    Text("14"),
+    Text("15")
+))</code></pre>
+<p><strong>Tip:</strong> Note the double opening and closing parentheses – the first is because we’re calling the <code>TupleView</code> initializer, and the second is to mark a tuple of our views, which is why we need to use commas to separate each view.</p>
+<p>This isn’t magic, or a hack – it’s exactly what SwiftUI does internally, albeit now extended to go one higher than the SwiftUI team chose. In fact, you can see all this for yourself because all these <code>TupleView</code> instances are directly inlined into our code at build time for maximum efficiency using SwiftUI’s public interface file.</p>
+<p>I mentioned this in the introduction to the book, but I’d like you to open it now. Run this command:</p>
+<p><strong>xed /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/SwiftUI.framework/Modules/SwiftUI.swiftmodule/x86_64-apple-ios-simulator.swiftinterface</strong></p>
+<p>(If you hit the error about CommandLineTools, see the book introduction for how to fix it!)</p>
+<p>If you look for <code>extension SwiftUI.ViewBuilder {</code> in the file that gets opened, you’ll see all the <code>TupleView</code> creation, like this:</p>
+<pre><code class="language-swift">extension SwiftUI.ViewBuilder {
+  @_alwaysEmitIntoClient public static func buildBlock&lt;C0, C1&gt;(_ c0: C0, _ c1: C1) -&gt; SwiftUI.TupleView&lt;(C0, C1)&gt; where C0 : SwiftUI.View, C1 : SwiftUI.View {
+        return .init((c0, c1))
+    }
+}</code></pre>
+<p>That’s literally doing the same thing we did, except it can use the shorthand <code>.init(())</code> rather than <code>TupleView(())</code> because Swift can see the return type of the method.</p>
+<p>SwiftUI doesn’t care how your <code>TupleView</code> instances are structured, meaning that you can place a <code>TupleView</code> inside a <code>TupleView</code> inside another <code>TupleView</code> and it will still get flattened down to a single collection of views. This means we can use Swift’s partial block results builders to allow any number of view children – try adding this:</p>
+<pre><code class="language-swift">extension ViewBuilder {
+    static func buildPartialBlock&lt;Content&gt;(first content: Content) -&gt; Content where Content: View {
+        content
+    }
+
+    static func buildPartialBlock&lt;C0, C1&gt;(accumulated: C0, next: C1) -&gt; TupleView&lt;(C0, C1)&gt; where C0: View, C1: View {
+        TupleView((accumulated, next))
+    }
+}</code></pre>
+<p>Just having those two partial block builders will cause SwiftUI to nest many <code>TupleView</code> instances, but that’s okay – it really doesn’t care how the views are structured, because internally it uses runtime reflection that inspects the type metadata to figure out exactly how many children existed. If you desperately wanted to get the exact same <code>TupleView</code> layout as SwiftUI has by default, while also permanently removing the 10-view limit, you would need to add a bunch more <code>buildPartialBlock()</code> methods to handle the full set of C0 through C9 views.</p><h2>Understanding identity</h2>
+<p>Every view in SwiftUI must be uniquely identifiable, by which I mean that SwiftUI needs to know exactly which view is located where at all times. This means all views have an <em>identity</em>: something about it that makes the view unique.</p>
+<!-- VIMEO: 787309185 25:49 -->
+<p>In SwiftUI these identities come in two forms:</p>
+<ul>
+<li>An <em>explicit</em> identity, where we tell SwiftUI the identity for a particular view.</li>
+<li>A <em>structural</em> identity, where SwiftUI implicitly generates identities for our views based on where we use them in our code.</li>
+</ul>
+<p>Regardless, all views must have an identity: SwiftUI will provide these as much as possible, but there are two key places where we use explicit identity:</p>
+<ol>
+<li>When we’re dealing with dynamic data, such as looping over an array.</li>
+<li>When we need to refer to a particular view, such as scrolling to a particular location.</li>
+</ol>
+<p>Understanding <em>why</em> identity is so important actual boils down into what might be the single biggest misunderstanding about SwiftUI: “when you make a change in your view hierarchy, SwiftUI performs tree diffing to figure out what changed.” Tree diffing would effectively mean Swift looking at the state of your view hierarchy before your change, and looking at it after the change, then walking through each to figure out what was added and removed.</p>
+<p>Previously I said that learners often think the parent of a view is whatever directly contains it – a text view’s parent might be a <code>VStack</code>, for example – and that it’s okay to take this approach while you’re learning. I think this is a similar situation: tree diffing feels natural when you’re learning because you can imagine exactly how it happens at runtime, and so I think it’s a perfectly fine answer that helps folks make progress.</p>
+<p>However, in practice tree diffing never happens thanks to the concept of identity: as it builds your view code, the Swift compiler has complete oversight into every subview you’re using, alongside every modifier, every condition, every loop, and more, and these all get encoded directly into the type of your views. We saw this earlier when using <code>type(of: self.body)</code> to examine what the actual type of our view body was, but it’s really important you understand this extends to logic as well.</p>
+<p>Try this, for example:</p>
+<pre><code class="language-swift">VStack {
+    if Bool.random() {
+        Text("Hello")
+    } else {
+        Text("Goodbye")
+    }
+}
+.onTapGesture {
+    print(type(of: self.body))
+}</code></pre>
+<p>When that runs and you tap the text you’ll see it prints the following into Xcode’s console: <code>ModifiedContent&lt;VStack&lt;_ConditionalContent&lt;Text, Text&gt;&gt;, AddGestureModifier&lt;_EndedGesture&lt;TapGesture&gt;&gt;&gt;</code>. If we break that down, you can see:</p>
+<ol>
+<li>At the top level we have a <code>ModifiedContent</code> view that contains a <code>VStack</code> as its view and an <code>AddGestureModifier</code> as its modifier.</li>
+<li>Inside the <code>VStack</code> is a <code>_ConditionalContent</code> view, which contains two <code>Text</code> views.</li>
+</ol>
+<p>That second part is what’s important here: the <code>_ConditionalContent</code> view, which is underscored because it’s considered a private implementation detail rather than something we should attempt to manipulate directly, is literally our <code>if</code> statement encoded into Swift’s type system.</p>
+<p>Like I said, <code>_ConditionalContent</code> is not exposed as public API, but we can at least see where it’s being made – use Open Quickly (Shift+Cmd+O) to look for “buildEither”, and you should find this in the SwiftUI generated interface:</p>
+<pre><code class="language-swift">public static func buildEither&lt;TrueContent, FalseContent&gt;(first: TrueContent) -&gt; _ConditionalContent&lt;TrueContent, FalseContent&gt; where TrueContent : View, FalseContent : View</code></pre>
+<p>So, that handles any kind of view for the true case, and any kind of view for the false case. When our condition changes – which it might whenever the body property is reinvoked, because it’s random – SwiftUI doesn’t need to do any view diffing because it just flips from the <code>TrueContent</code> view to the <code>FalseContent</code> view.</p>
+<p>It even does this when handling <code>switch</code> statements, which it collapses down into a binary tree of all possible states. Try this to see what I mean:</p>
+<pre><code class="language-swift">enum ViewState {
+    case a, b, c, d, e, f
+}
+
+struct ContentView: View {
+    @State var loadState = ViewState.a
+
+    @ViewBuilder var state: some View {
+        switch loadState {
+        case .a:
+            Text("a")
+        case .b:
+            Image(systemName: "plus")
+        case .c:
+            Circle()
+        case .d:
+            Rectangle()
+        case .e:
+            Capsule()
+        case .f:
+            RoundedRectangle(cornerRadius: 25)
+        }
+    }
+
+    var body: some View {
+        Button("Press") {
+            print(type(of: state))
+        }
+    }
+}</code></pre>
+<p>I’ve wrapped the various states up in a separate property to make the type easier to read, but when you press the button you’ll see the type is <code>_ConditionalContent&lt;_ConditionalContent&lt;_ConditionalContent&lt;Text, Image&gt;, _ConditionalContent&lt;Circle, Rectangle&gt;&gt;, _ConditionalContent&lt;Capsule, RoundedRectangle&gt;&gt;</code> – it’s a binary tree covering all our cases, so SwiftUI would need to jump through true, true, true to get some text, or true, true, false to load the image, and so on.</p>
+<p>This behavior of converting logic into types has two important side effects, both of which directly affect how we use SwiftUI:</p>
+<ul>
+<li>SwiftUI needs to be able to statically (i.e. at compile time) represent complex view layouts such as a stack containing three text views, then an image, then a nested stack, then a button, etc.</li>
+<li>That complex view layout is the actual underlying type of our view body.</li>
+</ul>
+<p>Remember, using modifiers transforms our views into nested <code>ModifiedContent</code> views, and using things like <code>VStack</code> causes SwiftUI to group multiple views into a <code>TupleView</code>. All these transformations create extremely long types for our views, which is where Swift’s opaque return types come in: when we write <code>some View</code> as the return type for our view body, it means we don’t want to explicitly have to write out the return type for our layout beyond saying “it will be some type that conforms to the <code>View</code> protocol,” but – importantly – we <em>aren’t</em> trying to hide that information from Swift.</p>
+<p>Remember, SwiftUI needs to know exactly what is in our view hierarchy in order to be able to update its layouts efficiently, but if we had sent back a regular protocol – if we were able to return <code>View</code> rather than <code>some View</code>, for example – then we’re explicitly hiding data from Swift. Elsewhere in our code that is often what we want, usually because we want to retain some flexibility for the future, but with SwiftUI it’s a very bad idea because it wants to identify all our views based on their type and position within our view hierarchy.</p>
+<p>This is all made possible because the <code>View</code> protocol contains this line of code:</p>
+<pre><code class="language-swift">@ViewBuilder var body: Self.Body { get }</code></pre>
+<p>That explicitly marks the <code>body</code> property of our views as using <code>@ViewBuilder</code> – a result builder that converts our layout into a carefully curated collection of <code>TupleView</code>, <code>ModifiedContent</code>, <code>_ConditionalContent</code>, and more. I used this explicitly earlier because only <code>body</code> gets it automatically applied by the protocol.</p>
+<p>So, <code>ModifiedContent</code> is generic over some kind of view and some kind of modifier, and <code>TupleView</code> is generic over all the views it contains, all so that SwiftUI has a complete overview of our layout – it can literally guarantee the contents of a <code>VStack</code>, for example, even when using conditions and loops to assemble it, which in turn it means all the views have clear structural identity.</p>
+<p>Now, maybe you’re wondering why all this matters, and the answer is that the identity of our view dictates its lifetime: as soon as the identity of a view changes, either structurally or explicitly, the view is destroyed.</p>
+<p>From a performance perspective this is pretty bad, because SwiftUI will throw away your platform views – the underlying <code>UIView</code> or <code>NSView</code> used to render your SwiftUI layout to the screen – when their matching SwiftUI lifetimes end, but more importantly it will also destroy any <em>data</em> your views were storing, because as far as SwiftUI is concerned you asked for your view to be destroyed.</p>
+<p>You already saw how <code>_ConditionalContent</code> is generic over its true and false content types, so perhaps you can see where this is leading: whenever we flip between two views using an <code>if</code> condition, that causes SwiftUI to throw away its platform views and all the state we created each time.</p>
+<p>You can see this in action with the following code:</p>
+<pre><code class="language-swift">struct ExampleView: View {
+    @State private var counter = 0
+
+    var body: some View {
+        Button("Tap Count: \(counter)") {
+            counter += 1
+        }
+    }
+}
+
+struct ContentView: View {
+    @State private var scaleUp = false
+
+    var body: some View {
+        VStack {
+            if scaleUp {
+                ExampleView()
+                    .scaleEffect(2)
+            } else {
+                ExampleView()
+            }
+
+            Toggle("Scale Up", isOn: $scaleUp.animation())
+        }
+        .padding()
+    }
+}</code></pre>
+<p>That renders the same view in two slightly different ways: one scaled up to 200%, and one at its default size. The scaling happens using an animated Boolean, and <code>ExampleView</code> stores some state for how many times its button was tapped.</p>
+<p>When you run that code you’ll notice two things:</p>
+<ol>
+<li>The scaling effect happens as a fade – the smaller button fades out, while the larger one fades in.</li>
+<li>The tap count for your view gets reset to 0 every time you toggle the switch.</li>
+</ol>
+<p>Both of these happen because of that <code>_ConditionalContent</code> flip: SwiftUI destroys the original <code>ExampleView</code> along with its platform rendering, and creates a new <code>ExampleView</code> in its place – the fade effect happens because we’re seeing a transition, rather than an animation. As for the <code>@State</code> being lost, again this is because SwiftUI considers the original view to be destroyed, so it removes all its data at the same time.</p>
+<p>We’re losing data, we’re losing smooth animations, and we’re making SwiftUI do a lot of extra work, because as far as SwiftUI is concerned these are two separate views. </p>
+<p>This problem remains even if we removed the view modifier so all that was changing was the way <code>ExampleView</code> was created:</p>
+<pre><code class="language-swift">struct ExampleView: View {
+    @State private var counter = 0
+    let scale: Double
+
+    var body: some View {
+        Button("Tap Count: \(counter)") {
+            counter += 1
+        }
+        .scaleEffect(scale)
+    }
+}
+
+struct ContentView: View {
+    @State private var scaleUp = false
+
+    var body: some View {
+        VStack {
+            if scaleUp {
+                ExampleView(scale: 2)
+            } else {
+                ExampleView(scale: 1)
+            }
+
+            Toggle("Scale Up", isOn: $scaleUp.animation())
+        }
+        .padding()
+    }
+}</code></pre>
+<p>Where things get interesting is what happens if we add some explicit identity, like this:</p>
+<pre><code class="language-swift">var body: some View {
+    VStack {
+        if scaleUp {
+            ExampleView(scale: 2)
+                .id("Example")
+        } else {
+            ExampleView(scale: 1)
+                .id("Example")
+        }
+
+        Toggle("Scale Up", isOn: $scaleUp.animation())
+    }
+    .padding()
+}</code></pre>
+<p>You might expect that to work, because now we’re telling SwiftUI that both our <code>ExampleView</code> instances are the same, but no dice – we’ll still get the views being destroyed and recreated, with all the associated problems of that.</p>
+<p>The problem isn’t having two <code>ExampleView</code> instances; that’s actually fine, and thanks to the <code>id()</code> modifier SwiftUI is able to figure out that they are the same view. The actual problem is <code>_ConditionalContent</code>, because as we saw earlier it explicitly stores its data as two separate views – it is hard-coded to think of its two pieces of data as being distinct, no matter what identifiers we attach to them. This means from a structural identity perspective our two views are different, no matter what explicit identifiers we give them.</p>
+<p>Remember, <code>_ConditionalContent</code> exists because the <code>View</code> protocol explicitly marks its <code>body</code> property as using <code>@ViewBuilder</code>. If we get our code <em>out</em> of the body then we don’t get <code>@ViewBuilder</code> unless we ask for it, which means we don’t get <code>_ConditionalContent</code>, and that in turn means SwiftUI is able to rely on the explicit identity we provide.</p>
+<p>We can see this for ourselves if we move our two <code>ExampleView</code> instances into a computed property, like this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var scaleUp = false
+
+    var exampleView: some View {
+        if scaleUp {
+            return ExampleView(scale: 2)
+                .id("Example")
+        } else {
+            return ExampleView(scale: 1)
+                .id("Example")
+        }
+    }
+
+    var body: some View {
+        VStack {
+            exampleView
+
+            Toggle("Scale Up", isOn: $scaleUp.animation())
+        }
+        .padding()
+    }
+}</code></pre>
+<p>Now SwiftUI will work as expected: it will preserve the state between both views, animate correctly, and perform efficiently. Even better, we can actually <em>remove</em> the <code>id()</code> modifier here and SwiftUI can still figure out it’s the same view.</p>
+<p>As usual, I’m going to explain why in a moment, but first I’d like you think about it before reading my answer – how is SwiftUI able to understand the two <code>ExampleView</code> instances are the same now, even without an explicit <code>id()</code> attached, when it couldn’t before?</p>
+<p>Still here?</p>
+<p>The answer is that removing <code>@ViewBuilder</code> removes the <code>_ConditionalContent</code> struct entirely, which means flipping between the two view states no longer means flipping between two different “True” view and a “False” view. </p>
+<p>Instead, because the <code>exampleView</code> property is used in a fixed position in our layout, SwiftUI can rely on good old structural identity to realize that the two structs should both map to the same underlying view – the property might return <code>ExampleView(scale: 2)</code> or <code>ExampleView(scale: 1)</code>, but either way it’s an instance of <code>ExampleView</code> so SwiftUI considers them the same view.</p>
+<p>This might sound ridiculous, or perhaps even dangerous: our code specifies two different <code>ExampleView</code> instances being sent back from a single property, so why should SwiftUI consider them the same? Understanding this gets to the very heart of what <code>@State</code> does and why it even exists.</p>
+<p>You see, every time SwiftUI evaluates a view’s <code>body</code> property it creates new instances of all the view structs inside – it <em>has</em> to, because structs always have a unique owner, and can’t somehow be “reused” from a previous body invocation.</p>
+<p>So, even a trivial view struct will be recreated often, which means SwiftUI regularly needs to map the old struct to the new struct – to recognize that two instances of a view struct are the same and should share the same state – so that it can preserve state correctly. When our <code>exampleView</code> property returns the same view type without using <code>@ViewBuilder</code>, it’s really no different from it having no condition at all and just returning a single view.</p>
+<p>Of course, by ditching <code>@ViewBuilder</code> we’ve lost all the things that make SwiftUI natural – we have to return one specific type of view from both our condition cases, so we’re out of luck if one case wants to add a background color while the other doesn’t.</p>
+<p>What SwiftUI really wants – and the kind of code we should really be striving for – is for us to use the ternary conditional operator, like this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var scaleUp = false
+
+    var body: some View {
+        VStack {
+            ExampleView(scale: scaleUp ? 2 : 1)
+
+            Toggle("Scale Up", isOn: $scaleUp.animation())
+        }
+        .padding()
+    }
+}</code></pre>
+<p>Using this approach we’re back to having structural identity do all the hard work for us: regardless of the value of <code>scaleUp</code> we have an <code>ExampleView</code> as the first child of our <code>VStack</code>, so SwiftUI will keep it alive as the Boolean changes.</p>
+<p>I think the problem is pretty clear in our current code, but it might take a little more thought when dealing with modifiers depending on which iOS version you’re targeting. For example, we might have some code to show a message in bold if the user hasn’t read it yet:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var isNewMessage = false
+
+    var body: some View {
+        if isNewMessage {
+            Text("Message title here").bold()
+        } else {
+            Text("Message title here")
+        }
+    }
+}</code></pre>
+<p>How could we write that as a single view? In iOS 16 and later the <code>bold()</code> modifier takes a Boolean saying whether it’s active or not, but if you’re targeting 15 or earlier – you either add the modifier or you don’t.</p>
+<p>If you aren’t able to target 16 or later, the fix here is to remove <code>bold()</code> entirely and replace it with <code>fontWeight()</code>, which <em>does</em> accept other options:</p>
+<pre><code class="language-swift">Text("Message title here").fontWeight(isNewMessage ? .bold : .regular)</code></pre>
+<p>We could get even simpler because <code>fontWeight()</code> actually accepts an optional weight, where <code>nil</code> means “the default”:</p>
+<pre><code class="language-swift">Text("Message title here").fontWeight(isNewMessage ? .bold : nil)</code></pre>
+<p>Some SwiftUI modifiers simply refuse to accept a customization parameter, with the most notorious being <code>hidden()</code> – it unconditionally hides a view in our layout, while leaving space where it was. This means using it puts back to the state loss problem from earlier:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var shouldHide = false
+
+    var body: some View {
+        VStack {
+            if shouldHide {
+                ExampleView(scale: 1)
+                    .hidden()
+            } else {
+                ExampleView(scale: 1)
+            }
+
+            Button("Toggle") {
+                withAnimation {
+                    shouldHide.toggle()
+                }
+            }
+        }
+    }
+}</code></pre>
+<p>Remember, the problem here is <code>@ViewBuilder</code>, not <code>ExampleView</code> – even if you tried to build an improved <code>hidden()</code> modifier that accepts a Boolean, you’ll fall foul if you adopt <code>@ViewBuilder</code>:</p>
+<pre><code class="language-swift">extension View {
+    @ViewBuilder func hidden(_ hidden: Bool) -&gt; some View {
+        if hidden {
+            self.hidden()
+        } else {
+            self
+        }
+    }
+}</code></pre>
+<p>Once again the key is to use a ternary conditional operator, which means no more need for <code>@ViewBuilder</code>:</p>
+<pre><code class="language-swift">extension View {
+    func hidden(_ hidden: Bool) -&gt; some View {
+        self.opacity(hidden ? 0 : 1)
+    }
+}</code></pre>
+<p>That preserves our view’s identity regardless of the value of <code>hidden</code>, which ensures the same view stays alive the entire time.</p>
+<p>So, while it might take a little extra work sometimes, using identity properly increases performance, preserves program state, and creates better animations.</p><h2>Intentionally discarding identity</h2>
+<p>There are a handful of places where you want to intentionally discard the identity of your views – to tell SwiftUI that two instances of a view are different no matter what it might otherwise think.</p>
+<!-- VIMEO: 787310247 7:21 -->
+<p>For example, consider the following list that shuffles its contents when a button is tapped:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var items = Array(1...20)
+
+    var body: some View {
+        VStack(spacing: 0) {                
+            List(items, id: \.self) {
+                Text("Item \($0)")
+            }
+
+            Button("Shuffle") {
+                withAnimation {
+                    items.shuffle()
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(5)
+        }
+    }
+}</code></pre>
+<p>Using <code>withAnimation()</code> here will trigger the default iOS list animation, where each row will slide from its old position to its new position. That might be what you want, but in many places this effect is rather hard on the eye – when a single row moves this animation looks great, but when <em>everything</em> moves it just causes a jumble.</p>
+<p><img src="../Assets/reordering.png" alt="A list rearranging all its rows with animation." /></p>
+<p>To fix this we can provide SwiftUI with an explicit identity for our list, but use a <em>random value</em> for that identity so that it changes every time the view is evaluated. This means SwiftUI sees the same structural location for the view but a different explicit identity, and so will consider the two lists to be different. In practice, that means it will remove one and insert the other using a default fade transition just by changing the code to this:</p>
+<pre><code class="language-swift">List(items, id: \.self) {
+    Text("Item \($0)")
+}
+.id(UUID())</code></pre>
+<p>That immediately looks better when many rows are changing at once, but it also means we now have complete control over how the animation happens rather than being forced to use the default list reorder animation. So, we could make a 1-second ease-in-out animation like this:</p>
+<pre><code class="language-swift">Button("Shuffle") {
+    withAnimation(.easeInOut(duration: 1)) {
+        items.shuffle()
+    }
+}</code></pre>
+<p>Or we could add a custom transition rather than fading, like this:</p>
+<pre><code class="language-swift">List(items, id: \.self) {
+    Text("Item \($0)")
+}
+.id(UUID())
+.transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))</code></pre>
+<p>So, now we have complete control over the animation, which means you can create something less intense as the default row slide, or perhaps something just plain different like our edge transition. If you tap Shuffle quickly, you’ll even see multiple overlapping lists arrive and depart in swift succession.</p>
+<p><img src="../Assets/discarding-identity1.png" alt="Multiple lists of items transitioning in and out at the same time." /></p>
+<p>Remember, discarding identity does have the downside that SwiftUI will destroy any underlying data storage and recreate any platform views, so be careful – there is a cost to this work, particularly when dealing with more complex views such as <code>List</code>.</p>
+<p>In the simplest case, this technique is useful when you want to let the user cycle through various options. For example, we could make a simple icon generator by selecting random colors and SF Symbols:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    let colors: [Color] = [.blue, .cyan, .gray, .green, .indigo, .mint, .orange, .pink, .purple, .red]
+    let symbols = ["run", "archery", "basketball", "bowling", "dance", "golf", "hiking", "jumprope", "rugby", "tennis", "volleyball", "yoga"]
+    @State private var id = UUID()
+
+    var body: some View {
+        VStack {
+            ZStack {
+                Circle()
+                    .fill(colors.randomElement()!)
+                    .padding()
+
+                Image(systemName: "figure.\(symbols.randomElement()!)")
+                    .font(.system(size: 144))
+                    .foregroundColor(.white)
+            }
+            .transition(.slide)
+            .id(id)
+
+            Button("Change") {
+                withAnimation(.easeInOut(duration: 1)) {
+                    id = UUID()
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(.bottom)
+        }
+    }
+}</code></pre>
+<p>Just changing the <code>id</code> property to a new value is enough to pick a new random color, a new random SF Symbol, and having the changes animate in smoothly – all by explicitly discarding identity.</p>
+<p><img src="../Assets/discarding-identity2.png" alt="A large purple circle showing someone playing rugby, with a Change button underneath." /></p><h2>Optional views, gestures, and more</h2>
+<p>We all know that optionals are a core feature of the Swift language, but don’t underestimate the usefulness of optionals in SwiftUI – you’ll find optionals are baked right into key places for extra flexibility.</p>
+<!-- VIMEO: 787310520 2:39 -->
+<p>For example, if you were just to look at Xcode’s autocompletion options you would see that the <code>background()</code> modifier accepts any kind of <code>View</code>, <code>Shape</code>, or <code>ShapeStyle</code>, but it doesn’t accept optionals – you need to provide a concrete instance of one of those types.</p>
+<p>However, SwiftUI is really smart here, and to see why I’d like you to try this code:</p>
+<pre><code class="language-swift">Text("Hello")
+    .background(Color.blue)
+    .onTapGesture {
+        print(type(of: self.body))
+    }</code></pre>
+<p>When that runs, you’ll see it has the type <code>_BackgroundStyleModifier&lt;Color&gt;</code>. </p>
+<p>In comparison, we could make the background optional, like this:</p>
+<pre><code class="language-swift">.background(Bool.random() ? Color.blue : nil)</code></pre>
+<p>When <em>that</em> runs you’ll see the type is now <code>_BackgroundModifier&lt;Optional&lt;Color&gt;&gt;</code> – the background of our view is a <code>Color?</code>, meaning that it might be there or might not depending on the result of our random Boolean.</p>
+<p>This is possible because <code>Optional</code> uses conditional conformance to become a <code>View</code> in its own right. To see how, use Open Quickly to bring up the generated interface for SwiftUI by searching for something like <code>NavigationStack</code>, then search in there for <code>extension Optional</code>. You’ll see that SwiftUI extends the <code>Optional</code> enum to conform to a range of protocols where it wraps types that conform to those protocols, like this:</p>
+<pre><code class="language-swift">extension Optional : Commands where Wrapped : Commands
+extension Optional : Gesture where Wrapped : Gesture
+extension Optional : View where Wrapped : View</code></pre>
+<p>So, <code>Optional</code> conforms to <code>Commands</code> where the thing inside the optional also conforms to <code>Commands</code>, etc. </p>
+<p>This is what makes it possible to conditionally apply backgrounds or overlays, or to conditionally enable a gesture based on some program state – use the gesture when your state is true, or use <code>nil</code> otherwise to remove it.</p>		</div>
+
+		<p style="text-align: center;"><a href="../index.html">Back to Table of Contents</a></p>
+
+		<p style="text-align: center; margin-top: 40px;">Copyright &copy; 2023 Paul Hudson, <a href="http://www.hackingwithswift.com">hackingwithswift.com</a>.<br /> <a href="http://twitter.com/twostraws">You should follow me on Twitter</a>.</p>
+	</body>
+
+	<script src="../Assets/prism.js"></script>
+</html>

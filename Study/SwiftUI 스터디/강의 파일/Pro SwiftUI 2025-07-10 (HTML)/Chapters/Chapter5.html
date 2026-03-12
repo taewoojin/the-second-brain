@@ -1,0 +1,709 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Drawing and Effects - Pro SwiftUI</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<link rel="stylesheet" href="../Assets/project.css">
+		<link rel="stylesheet" href="../Assets/prism.css">
+	</head>
+
+	<body>
+		<p style="text-align: center;"><img id="logo" src="../Assets/logo.png" alt="Pro SwiftUI" width="560" /></p>
+
+		<div id="container">
+<h1>Drawing and Effects</h1><h2>Drawing with Canvas</h2>
+<p>It’s no secret that I'm obsessed with drawing using SwiftUI, and honestly I’ve lost countless hours noodling around, experimenting, and having <em>fun</em> creating beautiful effects with surprisingly little code. I want to explore a handful of these techniques, partly because it really is a lot of fun creating beautiful things, but also because I hope to inspire you to add some extra surprise and delight to your own apps.</p>
+<!-- VIMEO: 789619716 11:21 -->
+<p>We’re going to start with something nice and easy: a trivial particle system that lets us draw in glowing lights by touching the screen. Particle systems work by creating dozens, hundreds, or even <em>thousands</em> of very small images, which can be colored and animated to create a variety of special effects such as fire, smoke, fog, and rain.</p>
+<p>In this initial foray into drawing, our particle system will be trivial: we’ll constantly be creating and deleting particles, and the user will be able to move their finger to reposition the place where we generate particles from. This takes fewer than 50 lines of code, and that’s <em>including</em> whitespace and lines that are just closing braces – it’s a great entry point into the world of drawing with SwiftUI.</p>
+<p>The first step is to create a <code>Particle</code> struct that will store the data one particle needs to work. We’ll make more advanced particles later on, but for this example our particle just needs two pieces of data: its position on the screen, and the date it should be destroyed. We’ll pass the X and Y values in from the particle system that generates it all, but we can automatically set the destruction date to be the current time plus 1 second so that each particle lasts that long before being destroyed.</p>
+<p>Add this struct now:</p>
+<pre><code class="language-swift">struct Particle {
+    let position: CGPoint
+    let deathDate = Date.now.timeIntervalSinceReferenceDate + 1
+}</code></pre>
+<p>Now that we have defined a single particle, the next step is to create the particle system responsible for creating and managing all the particles. This has six interesting things:</p>
+<ol>
+<li>It will be a class rather than a struct, so we can mutate its values freely without triggering SwiftUI updates.</li>
+<li>It needs to store an array of all the particles that are currently alive.</li>
+<li>It also needs to store the current position of the particle system, which is used to create new particles.</li>
+<li>We’ll give it one method, called <code>update()</code>. This will be called every time we want to redraw our canvas, and will be provided with the current time.</li>
+<li>Inside there we’ll destroy any particles that are past their <code>deathDate</code> property.</li>
+<li>Finally, it will also create a new particle at the current position of the particle system.</li>
+</ol>
+<p>It takes much less code to implement all that than it does to explain it, so go ahead and add this class now:</p>
+<pre><code class="language-swift">class ParticleSystem {
+    var particles = [Particle]()
+    var position = CGPoint.zero
+
+    func update(date: TimeInterval) {
+        particles = particles.filter { $0.deathDate &gt; date }
+        particles.append(Particle(position: position))
+    }
+}</code></pre>
+<p>That completes all our data model, so what remains is to create one of those particle systems inside <code>ContentView</code>, then use its data to render particles inside <code>TimelineView</code> and <code>Canvas</code>.</p>
+<p>This class doesn’t conform to <code>ObservableObject</code> because it doesn’t need to – it manages itself without needing to publish any changes. So, we’ll create it using <code>@State</code> rather than <code>@StateObject</code>, which is enough to keep the object alive through view recreations without also requiring <code>ObservableObject</code>.</p>
+<p>Add this property to <code>ContentView</code> now:</p>
+<pre><code class="language-swift">@State private var particleSystem = ParticleSystem()</code></pre>
+<p>Now for the view’s body. I’m going to tackle this in three parts to make it easier to follow: we’ll create the SwiftUI views first, then add some modifiers to make it look and work right, then finish up by adding the actual drawing code. </p>
+<p>First, the views. We need a <code>TimelineView</code> so that SwiftUI knows to redraw our layout on a fixed schedule, which in our case will be <code>.animation</code> so it redraws as often as necessary to get smooth animations. Inside that we’ll place a <code>Canvas</code>, which is where SwiftUI gives us free rein to draw whatever we need inside a drawing context with a fixed size.</p>
+<p>Replace your current <code>body</code> property with this:</p>
+<pre><code class="language-swift">TimelineView(.animation) { timeline in
+    Canvas { ctx, size in
+        // drawing code here
+    }
+}</code></pre>
+<p>We’re going to add three modifiers to that <code>TimelineView</code> to get exactly the right effect:</p>
+<ol>
+<li>A custom drag gesture so that we can update the particle system’s position as the user moves their finger. If we give this a minimum distance of 0 it means the gesture will start being triggered as soon as the user moves their finger even the smallest amount.</li>
+<li>We’ll the <code>TimelineView</code> to ignore the safe area, so the user can draw to the very edges of the screen.</li>
+<li>Finally, we’ll give it a black background color so that our finger drawings stand out nice and bright.</li>
+</ol>
+<p>Add these three modifiers to the <code>TimelineView</code> now:</p>
+<pre><code class="language-swift">.gesture(
+    DragGesture(minimumDistance: 0)
+        .onChanged { drag in
+            particleSystem.position = drag.location
+        }
+)
+.ignoresSafeArea()
+.background(.black)</code></pre>
+<p>The last part of the puzzle is to fill in the drawing code. This needs to call the particle system’s <code>update()</code> method with the current time from the <code>TimelineView</code>, then loop over all the particles and render a circle at their location. I chose a 32x32 size for my circles, but you can make the circle whatever size you want – just make sure you subtract half the size from the X and Y position so the circle is centered on the user’s finger.</p>
+<p>Replace the <code>// drawing code here</code> comment with this:</p>
+<pre><code class="language-swift">let timelineDate = timeline.date.timeIntervalSinceReferenceDate
+particleSystem.update(date: timelineDate)
+
+for particle in particleSystem.particles {
+    ctx.fill(Circle().path(in: CGRect(x: particle.position.x - 16, y: particle.position.y - 16, width: 32, height: 32)), with: .color(.cyan))
+}</code></pre>
+<p>Go ahead and give it a try. All being well you should find you can drag your finger on the screen to see blue circles follow you around, each of which should disappear a second after they are created.</p>
+<p><img src="../Assets/canvas-drawing1.png" alt="Lots of circles arranged in what can only be described as a squiggle." /></p>
+<p>That’s a <em>start</em>, but it’s not what I’d call beautiful. We can do better! First, rather than making circles simply disappear we can make them fade away slowly by subtracting the current time from their <code>deathDate</code> property and using that for the canvas opacity. So, if <code>deathDate</code> was 3.5 and the timeline date was 3.0, we’d set opacity to 0.5.</p>
+<p>Add this line of code directly before the <code>ctx.fill()</code> line:</p>
+<pre><code class="language-swift">ctx.opacity = particle.deathDate - timelineDate</code></pre>
+<p>That’s an improvement, but to get something much nicer I’d like you to add these two lines of code directly after the call to <code>particleSystem.update()</code>:</p>
+<pre><code class="language-swift">ctx.blendMode = .plusLighter
+ctx.addFilter(.blur(radius: 10))</code></pre>
+<p>The first of those tells SwiftUI to blend the circles together so the colors get lighter when they overlap, and the second will apply a Gaussian blur to all the circles so they look more like a smooth glow than individual circles.</p>
+<p>And with that we’re done with our first drawing example! Try it out and see what you think – given how little code we’ve written I think the end result is quite beautiful!</p>
+<p><img src="../Assets/canvas-drawing2.png" alt="Lots of circles drawn in a squiggle, but blended together intensively so it looks like glowing light." /></p><h2>Falling snow</h2>
+<p>Now that you’ve got the hang of a basic particle system, let’s take it up a notch by creating particles that move independently rather than always staying where they were created. This means being able to constantly adjust our particles after they have been created, which in turn means using a class rather than a struct for the <code>Particle</code> type.</p>
+<!-- VIMEO: 789620462 16:54 -->
+<p>Add this class now:</p>
+<pre><code class="language-swift">class Particle {
+    var x: Double
+    var y: Double
+    let xSpeed: Double
+    let ySpeed: Double
+    let deathDate = Date.now.timeIntervalSinceReferenceDate + 2
+
+    init(x: Double, y: Double, xSpeed: Double, ySpeed: Double) {
+        self.x = x
+        self.y = y
+        self.xSpeed = xSpeed
+        self.ySpeed = ySpeed
+    }
+}</code></pre>
+<p>There are a few things that deserve extra explanation:</p>
+<ol>
+<li>I’ve split <code>x</code> and <code>y</code> into two separate properties because it makes them easier to work with.</li>
+<li>The <code>ySpeed</code> will determine how fast this particle moves down the screen, and the <code>xSpeed</code> is there to let us add a very small amount of horizontal movement to make the particles look a bit more natural.</li>
+<li>There’s a 2-second lifetime for each particle so they can fall most if not all of the way down the screen before being destroyed.</li>
+<li>It’s a class rather than a struct, so we need a custom initializer.</li>
+</ol>
+<p>Next we need to write the <code>ParticleSystem</code> class. This is similarly enhanced from our previous, simpler particle system, because now it needs some extra features:</p>
+<ol>
+<li>We need to move all particles that are still alive.</li>
+<li>That movement needs to happen at a fixed speed regardless of how fast the app is rendering.</li>
+<li>We need to create new particles at random locations at the top of the screen, so they fall down evenly from the left screen edge to the right.</li>
+<li>Knowing where the right edge of the screen lies means sending in the canvas size.</li>
+</ol>
+<p>That second point is the most interesting from a code perspective, because we need to make sure particles move at the same speed no matter whether <code>update()</code> is called 60 times a second (the ideal for many devices), 120 times a second (the ideal for devices that support ProMotion), or even just 30 frames a second if your app is busy doing a lot of other work.</p>
+<p>This can be done using a technique called <em>frame-independent movement</em>, which means we calculate how much time has passed since <code>update()</code> was last called, then multiply our movement speed by that time difference. So, if we want to move 60 points per second and a tenth of a second has elapsed since the last update, we move by 6 points, but if only 1/60th of a second elapsed then we move only 1 point.</p>
+<p>Doing this means giving our <code>ParticleSystem</code> class an extra property that stores when <code>update()</code> was last called. This can be the current date to begin with, but it will be changed every time <code>update()</code> is called.</p>
+<p>Start with this new class:</p>
+<pre><code class="language-swift">class ParticleSystem {
+    var particles = [Particle]()
+    var lastUpdate = Date.now.timeIntervalSinceReferenceDate
+}</code></pre>
+<p>The <code>update()</code> method will accept the same time interval we used in the previous particle system, but like I said we’re also going to make it accept the size of the screen so we know where particles can be created. Each new particle needs various values provided as part of its initializer:</p>
+<ul>
+<li>The X coordinate will be any value between -32 and the screen width. Our particles will be 32 points, just like in the previous particle system, so using -32 means we’ll position some particles partly off the left edge to ensure a full spread of positions.</li>
+<li>The Y coordinate will always be exactly -32, which places new particles just off the top edge of the view.</li>
+<li>The X speed will be a random number between -50 and 50, so particles move very gently left or right.</li>
+<li>The Y speed will be a random number between 100 and 500, so particles move swiftly down the screen. Having a lot of variation in speed will create a pleasing sense of depth to the particles.</li>
+</ul>
+<p><strong>Note:</strong> It’s important we replace the value of <code>lastUpdate</code> with whatever is the new timeline date, so the next time the method is called we move the correct amount.</p>
+<p>Add this method to <code>ParticleSystem</code> now:</p>
+<pre><code class="language-swift">func update(date: TimeInterval, size: CGSize) {
+    let delta = date - lastUpdate
+    lastUpdate = date        
+
+    // update all particles here
+
+    let newParticle = Particle(x: .random(in: -32...size.width), y: -32, xSpeed: .random(in: -50...50), ySpeed: .random(in: 100...500))
+    particles.append(newParticle)
+}</code></pre>
+<p>Obviously I left the most important part out, which is where we update each particle to take into account its movement across the screen. We need to remove particles from our array whenever they pass their death date, just like we did with the previous particle system, so we might as well use the same loop to perform our frame-independent movement.</p>
+<p>Add this loop in place of the <code>// update all particles here</code> comment:</p>
+<pre><code class="language-swift">for (index, particle) in particles.enumerated() {
+    if particle.deathDate &lt; date {
+        particles.remove(at: index)
+    } else {
+        particle.x += particle.xSpeed * delta
+        particle.y += particle.ySpeed * delta
+    }
+}</code></pre>
+<p>That completes our data model, so now we can turn to the SwiftUI view to render it all using <code>TimelineView</code> and <code>Canvas</code>. We’re going to write a few versions of this, but our initial pass is identical to the <code>ContentView</code> struct from our previous particle system apart from three changes:</p>
+<ol>
+<li>We need to pass the canvas size into our particle system’s <code>update()</code> method, so it knows the full range of space that can be used to create particles.</li>
+<li>We aren’t going to add a blend mode. You can add one if you want, but it’s not the effect I’m looking for here.</li>
+<li>We don’t need to offset the particle’s X and Y position by half the circle width, because we don’t need to draw exactly under the user’s finger any more.</li>
+</ol>
+<p>Otherwise it’s exactly the same, so replace your existing <code>ContentView</code> struct with this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var particleSystem = ParticleSystem()
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            Canvas { ctx, size in
+                let timelineDate = timeline.date.timeIntervalSinceReferenceDate
+                particleSystem.update(date: timelineDate, size: size)
+                ctx.addFilter(.blur(radius: 10))
+
+                for particle in particleSystem.particles {
+                    ctx.opacity = particle.deathDate - timelineDate
+                    ctx.fill(Circle().path(in: CGRect(x: particle.x, y: particle.y, width: 32, height: 32)), with: .color(.white))
+                }
+            }
+        }
+        .ignoresSafeArea()
+        .background(.black)
+    }
+}</code></pre>
+<p><img src="../Assets/snow1.png" alt="Fluffy white blobs falling from the top of the screen." /></p>
+<p>That already creates a neat snow effect, but it takes only a little extra work to push this into much more interesting territory. For example, we could make our snow blobs look like metaballs with only a little extra code.</p>
+<p><strong>Important:</strong> Before you decide to email me saying I wrote “metaballs” when I meant to write “meatballs”, you should know that metaballs is the correct spelling and is the term used for organic-looking shapes that appear to meld together when they are in close proximity to each other.</p>
+<p>If you haven’t seen metaballs in action before, you’re in for a real treat – not least because it’s remarkable how little code it takes in SwiftUI.</p>
+<p>The first step is to tell SwiftUI to render all our particles into a distinct layer. This means all the particles will be rendering into a new transparent context, which is then drawn onto our original context in one pass. So, rather than seeing each particle as individual, the original context will just be given all the particles as one finished drawing – perfect for blending into metaballs.</p>
+<p>To make this happen, add <code>ctx.drawLayer { ctx in</code> before the <code>for</code> loop in our canvas, and add a closing brace after the loop ends, like this:</p>
+<pre><code class="language-swift">ctx.drawLayer { ctx in
+    for particle in particleSystem.particles {
+        ctx.opacity = particle.deathDate - timelineDate
+        ctx.fill(Circle().path(in: CGRect(x: particle.x, y: particle.y, width: 32, height: 32)), with: .color(.white))
+    }
+}</code></pre>
+<p><strong>Important:</strong> That creates a new context inside <code>drawLayer()</code>. I’ve given it the same <code>ctx</code> name as the outer layer because a) we can’t draw to the outer context from inside the layer, and b) it means we don’t need to change the <code>opacity</code> and <code>fill()</code> lines, but you’re welcome to name it <code>inner</code> or similar.</p>
+<p>If you run the code now you’ll see nothing has changed, but behind the scenes SwiftUI is now rendering all the particles into a new layer, then drawing that layer into our main context. Although it looks the same to the user, the behind the scenes part matters to us because if we add more filters they get applied to the whole sublayer in one pass – overlapping circles are treated like one contiguous shape rather than two separate ones.</p>
+<p>In this case we’re going to add the alpha threshold filter, which tells SwiftUI to replace all the pixels with a specific color if they fall within alpha values of our choosing, or make them transparent otherwise. The maximum alpha value is 1 by default, so if we specify 0.5 for the minimum it means that all pixels between alpha 0.5 and 1.0 will be replaced with a specific color, but pixels outside that alpha range will be invisible. </p>
+<p>Think about it: we’re using a blur filter already, so already quite a lot of each circle will fall outside that alpha threshold because only the central parts will have enough opacity to pass the threshold. But when two circles overlap, even partly, the parts where they overlap will have a higher alpha value, and because we’re rendering all our circles into a sublayer it means this filter will see the combined circle areas as a single pixel colors to evaluate.</p>
+<p>To see the result of all this, and the following code directly before the blur filter:</p>
+<pre><code class="language-swift">ctx.addFilter(.alphaThreshold(min: 0.5, color: .white))</code></pre>
+<p>If you run the code now you should see the metaball effect in full swing: as the particles overlap each other they will appear to merge together as if they were water drops rolling down a window. Hopefully you can see what I meant when I said they looked organic!</p>
+<p><img src="../Assets/snow2.png" alt="White balls falling down from the top of the screen, blending together when they are near to each other." /></p>
+<p>To create an even more interesting effect, try using your <code>TimelineView</code> as the mask for something else, such as a linear gradient, like this:</p>
+<pre><code class="language-swift">LinearGradient(colors: [.red, .indigo], startPoint: .top, endPoint: .bottom).mask {
+    // current TimelineView code
+}
+.ignoresSafeArea()
+.background(.black)</code></pre>
+<p>Now the metaballs will appear to change color the lower they get on the screen, creating an effect reminiscent of lava lamps. Can we make an <em>actual</em> lava lamp effect? Certainly, but that takes quite a bit more thinking…</p>
+<p><img src="../Assets/snow3.png" alt="Brightly colored balls falling from the top of the screen, blending together when they are near to each other." /></p><h2>Creating a lava lamp</h2>
+<p>For a really advanced effect, we can use SwiftUI to create a lava lamp by combining <code>Canvas</code>, metaballs, and a chunk of mathematics. To make things easier to follow I’m going to adopt a simplified approach first that does without the math, but if you have the patience I encourage you stick around for the extended version – it’s worth it!</p>
+<!-- VIMEO: 789621470 34:10 -->
+<p>As with the previous two particle systems, the first step is to define what one particle needs to know in order to work. The particles will move, which means we need a class with X and Y coordinates, but this time there are a few small changes:</p>
+<ul>
+<li>We will need to be able to loop over particles in SwiftUI code, which means making this class conform to <code>Identifiable</code> with a random UUID.</li>
+<li>Each particle will have a unique size, making our lava lamp more varied.</li>
+<li>The lava bubbles won’t move horizontally, so we need only a single speed property to handle Y movement.</li>
+<li>We need to track whether this bubble is currently moving up or down, because we will never destroy the lava particles – we just keep reusing the same initial batch, flipping their direction when they reach one end.</li>
+</ul>
+<p>There is also one important change: we need to fill our lava lamp with lots of particles when the app is launched, which means creating all our particles up front rather than on a rolling basis. That in turn means we don’t actually know the canvas’s dimensions when creating our particles, so rather than storing absolute X and Y positions – e.g. X:50 Y:300 – we will instead store <em>relative</em> positions between 0 and 1, where 0 is the top or left edge and 1 is the bottom or right edge.</p>
+<p>So, start by creating this new <code>Particle</code> class:</p>
+<pre><code class="language-swift">class Particle: Identifiable {
+    let id = UUID()
+    var size = Double.random(in: 100...250)
+    var x = Double.random(in: -0.1...1.1)
+    var y = Double.random(in: -0.25...1.25)
+    var isMovingDown = Bool.random()
+    var speed = Double.random(in: 0.01...0.1)
+}</code></pre>
+<p><strong>Note:</strong> That creates particles in positions that go slightly beyond the screen’s bounds to make sure we get a full spread. The spread is wider for the Y axis because we’ll be moving particles vertically, so they can safely go further off the screen before coming back on. </p>
+<p>Next we need to create a <code>ParticleSystem</code> class responsible for creating the lava bubbles and moving them around. This starts similar to the previous particle system, so add this now:</p>
+<pre><code class="language-swift">class ParticleSystem {
+    let particles: [Particle]
+    var lastUpdate = Date.now.timeIntervalSinceReferenceDate
+
+    func update(date: TimeInterval) {
+        let delta = date - lastUpdate
+        lastUpdate = date
+
+        for particle in particles {
+            // move the particles
+        }
+    }
+}</code></pre>
+<p>Apart from the <code>// move the particles</code> comment, there is <em>one</em> important difference here: rather than creating particles dynamically as the app runs, we’re instead going to create them all up front. This is why <code>particles</code> can be a constant array now, and also why it doesn’t have a default value – we need to add an initializer to create all our particles up front. </p>
+<p>We could make the number of particles fixed, but it’s hardly any extra work to make that amount customizable. So, add this initializer to <code>ParticleSystem</code> now:</p>
+<pre><code class="language-swift">init(count: Int) {
+    particles = (0..&lt;count).map { _ in Particle() }
+}</code></pre>
+<p>Now for the movement: if the particle is moving down, we’ll add to its Y position using frame-independent movement, otherwise we’ll subtract from it. Critically, we’ll add two extra checks to make sure particles flip their movement when they are fully off the screen.</p>
+<p>Replace the <code>// move the particles</code> comment with this:</p>
+<pre><code class="language-swift">if particle.isMovingDown {
+    particle.y += particle.speed * delta
+
+    if particle.y &gt; 1.25 {
+        particle.isMovingDown = false
+    }
+} else {
+    particle.y -= particle.speed * delta
+
+    if particle.y &lt; -0.25 {
+        particle.isMovingDown = true
+    }
+}</code></pre>
+<p>Now for the main event: rendering all this in SwiftUI. We’re going to take a different approach here, partly because it demonstrates an important <code>Canvas</code> technique, but honestly mostly because it makes it much easier to switch over to the more advanced version if you decide to pursue it!</p>
+<p>The different approach is this: rather than just filling circles in our <code>Canvas</code> code, we are instead going to create our shapes as SwiftUI views and pass them into the canvas as <em>symbols</em>. This is a real powerhouse <code>Canvas</code> technique because it lets us place any kind of SwiftUI view directly into our drawings. This will be really important in the more advanced lava lamp effect, but for now we’ll just create SwiftUI circles in there.</p>
+<p>Apart from that drawing change, there are two other thing we’re going to do: </p>
+<ol>
+<li>Rather than use fixed values for the blur and threshold filters, we’ll make them local state you can adjust using sliders. This will give you a much better idea of how the finished effect really works, because you’l be able to noodle around with both sliders to get exactly the result you want.</li>
+<li>We’ll be using the same <code>LinearGradient</code> mask as before, but this time we’ll give it a background color indigo. Why? Well, if lava lamps can’t be disco, what can?</li>
+</ol>
+<p>Go ahead and add this <code>ContentView</code> now:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var particleSystem = ParticleSystem(count: 15)
+    @State private var threshold = 0.5
+    @State private var blur = 30.0
+
+    var body: some View {
+        VStack {
+            LinearGradient(colors: [.red, .orange], startPoint: .top, endPoint: .bottom).mask {
+                TimelineView(.animation) { timeline in
+                    Canvas { ctx, size in
+                        particleSystem.update(date: timeline.date.timeIntervalSinceReferenceDate)
+                        ctx.addFilter(.alphaThreshold(min: threshold))
+                        ctx.addFilter(.blur(radius: blur))
+
+                        ctx.drawLayer { ctx in
+                            // draw particles here
+                        }
+                    } symbols: {
+                        // create symbols here
+                    }
+                }
+            }
+            .ignoresSafeArea()
+            .background(.indigo)
+
+            LabeledContent("Threshold") {
+                Slider(value: $threshold, in: 0.01...0.99)
+            }
+            .padding(.horizontal)
+
+            LabeledContent("Blur") {
+                Slider(value: $blur, in: 0...40)
+            }
+            .padding(.horizontal)
+        }
+    }
+}</code></pre>
+<p><img src="../Assets/lava1.png" alt="Our layout so far: mostly blank, with some sliders at the bottom." /></p>
+<p>I’ve removed two key parts from that code, both relating to the way canvas symbols work. You see, the way this works is that we get to pass in as many SwiftUI views as we want, either statically written out in code or dynamically using <code>ForEach</code>, but the main thing is that we give each view a unique identifier. Our <code>Particle</code> class conforms to <code>Identifiable</code>, which means SwiftUI will take care of that part for us.</p>
+<p>So, for the case of our lava particles, I’d like you to add the following code in place of the <code>// create symbols here</code> comment:</p>
+<pre><code class="language-swift">ForEach(particleSystem.particles) { particle in
+    Circle()
+        .frame(width: particle.size, height: particle.size)
+}</code></pre>
+<p>That creates a whole bunch of SwiftUI <code>Circle</code> shapes, each the correct size for their bubble. Again, SwiftUI will silently tag each view for us because of the <code>Identifiable</code> conformance, and that <em>matters</em> because when it comes to the rendering code – where the <code>// draw particles here</code> comment is – we need to look up each circle using the same identifier.</p>
+<p>This lookup is done using the <code>resolveSymbol(id:)</code> method, which takes an identifier to look up in the list of symbols. If it’s found we’ll be sent back the resolved symbol to use, which will be a SwiftUI view we can draw just like any other shape.</p>
+<p>Remember, this time we’re using relative positions for our particles, so we need to multiply the particle’s X and Y positions by our canvas’s width and height respectively.</p>
+<p>Go ahead and replace the <code>// draw particles here</code> comment with this:</p>
+<pre><code class="language-swift">for particle in particleSystem.particles {
+    guard let shape = ctx.resolveSymbol(id: particle.id) else { continue }
+    ctx.draw(shape, at: CGPoint(x: particle.x * size.width, y: particle.y * size.height))
+}</code></pre>
+<p>That’s us done, at least with the simplified version – try it out and see what you think! The code is broadly similar to our previous particle system, but I think it looks remarkably good.</p>
+<p><img src="../Assets/lava2.png" alt="A lava lamp effect created by blending circles together with a gradient." /></p>
+<h2>Wouldn’t it be lava-ly?</h2>
+<p>Can we do better? Yes! If we create irregular polygons rather than circles, we can adjust the length of each of their sides using animation, making the shape change constantly. Thanks to our blur filter the shapes will still look nice and smooth even though they are pretty rough polygons</p>
+<p>I’ll be honest, this does take a bit of math. However, I have tried to remove as much code as I possibly can, so hopefully it’s understandable.</p>
+<p>First, the good news: <code>Particle</code> and <code>ParticleSystem</code> don’t need to change at all, and only one small line of <code>ContentView</code> will change – most of what we’re writing is new.</p>
+<p>Now for the first piece of mathematics: we’re going to add an extension on <code>Array</code> so that it conforms to both <code>VectorArithmetic</code> and <code>AdditiveArithmetic</code> when it contains <code>Double</code> as its element type. These protocols are used to provide animating values to SwiftUI, which in our case means the polygon points we generate will animate to be longer or shorter over time.</p>
+<p>Yes, I know that extending a type we don’t own to support protocols we don’t own is frowned upon, but it avoids having to create a wholly separate type – this code really is as simple as I can make it!</p>
+<p>There are quite a few parts here, so start by adding this empty extension so we can fill it in bit by bit:</p>
+<pre><code class="language-swift">extension Array: VectorArithmetic, AdditiveArithmetic where Element == Double {
+}</code></pre>
+<p>First, we need to tell SwiftUI what <em>zero</em> looks like, which for us means an empty array with 0 in. Add this to the extension now:</p>
+<pre><code class="language-swift">public static var zero = [0.0]</code></pre>
+<p>Next we need to add operator overloads for <code>+=</code> and <code>-=</code> so that SwiftUI can add one array to another. I’m going to assume (again, this is simplified!) that our lava polygons don’t change their side counts over time, so we can safely enumerate over both arrays and add or subtract each item.</p>
+<p>So, add these two new methods to the extension:</p>
+<pre><code class="language-swift">public static func +=(lhs: inout [Double], rhs: [Double]) {
+    for (index, item) in rhs.enumerated() {
+        lhs[index] += item
+    }
+}
+
+public static func -=(lhs: inout [Double], rhs: [Double]) {
+    for (index, item) in rhs.enumerated() {
+        lhs[index] -= item
+    }
+}</code></pre>
+<p>Next, the protocols require that add a <code>scale(by:)</code> method that multiplies each item in the array by another number, so add this:</p>
+<pre><code class="language-swift">public mutating func scale(by rhs: Double) {
+    for (index, item) in self.enumerated() {
+        self[index] = item * rhs
+    }
+}</code></pre>
+<p>Finally, the protocols require we add a <code>-</code> operator overload and a <code>magnitudeSquared</code> property. Although the protocols require that these exist, they won’t actually be used by our lava lamp effect so we can just write dummies like these two:</p>
+<pre><code class="language-swift">public static func -(lhs: [Double], rhs: [Double]) -&gt; [Double] { [] }
+public var magnitudeSquared: Double { 0 }</code></pre>
+<p>Okay, that completes our extension, so now we’re going to create two structs to represent each blob: one that creates the shape using whatever points are provided, and one that wraps the shape in a view that animates over time.</p>
+<p>The view is straightforward, but the shape is where more mathematics comes in, so let’s start there.</p>
+<p>First, we can create a new struct that conforms to <code>Shape</code>, and has a property to store an array of numbers that represent how much we should shrink or extend each side of the polygon. In order for this to be animated we need to either store these values in an <code>animatableData</code> property containing these values, or store them in another property and provide a getter/setter combo for <code>animatableData</code>.</p>
+<p>We’re aiming for the simplest solution, so that means using a single property. Add this now:</p>
+<pre><code class="language-swift">struct AnimatablePolygonShape: Shape {
+    var animatableData: [Double]
+
+    init(points: [Double]) {
+        animatableData = points
+    }
+}</code></pre>
+<p>Now for the mathematics: we need to create a <code>path(in:)</code> method that creates a path from our polygon’s points, taking into account the animatable data array that describes how much to shrink or extend each side.</p>
+<p>We’ll fill this in piece by piece, starting with this:</p>
+<pre><code class="language-swift">func path(in rect: CGRect) -&gt; Path {
+    Path { path in
+        // more code to come
+    }
+}</code></pre>
+<p>If we want to draw completely regular polygons – i.e., polygons where every side has the same length, we can do so by following a simple procedure:</p>
+<ol>
+<li>Calculating the center of our drawing rectangle, by halving the width and height.</li>
+<li>Calculate the radius of the largest circle that can fit into our space. This is as simple as choosing the smallest of the two numbers from our center.</li>
+<li>Count from 0 to the number of sides we want to create, and calculate how far we are through the number of sides as a fraction between 0 and 1. So, if we’re placing five sides, the first side will be 0.0, the third side will be 0.5, and the last will be 1.0.</li>
+<li>Multiply that fraction by pi times 2 so we get an angle between 0 and 2π radians, or 0 through 360 degrees, meaning that we know the angle we need to use to create each point.</li>
+<li>Get the X coordinate for this point by calculating the cosine of the angle we just made, multiplying it by our radius, then adding the result to our center X value.</li>
+<li>Get the Y coordinate by doing the same thing, except using sine rather than cosine.</li>
+</ol>
+<p>Again, that creates <em>regular</em> polygons. We want <em>irregular</em> polygons using the animatable <code>Double</code> array, which will contain numbers between 0.8 and 1.2 – one for each point in our polygon. So, once we’ve figured out the correct X/Y coordinates for our regular polygon, we can multiply those values by the matching element in <code>animatableData</code> so that each side can be made any length from 80% to 120% its original size.</p>
+<p>That might seem awfully complicated, but I think the code is surprisingly straightforward given how good the finished effect looks!</p>
+<p>So, go ahead and replace the <code>// more code to come</code> with this:</p>
+<pre><code class="language-swift">let center =  CGPoint(x: rect.width / 2, y: rect.height / 2)
+let radius = min(center.x, center.y)
+
+let lines = animatableData.enumerated().map { index, value in
+    let fraction = Double(index) / Double(animatableData.count)
+    let xPos = center.x + radius * cos(fraction * .pi * 2)
+    let yPos = center.y + radius * sin(fraction * .pi * 2)
+    return CGPoint(x: xPos * value, y: yPos * value)
+}
+
+path.addLines(lines)</code></pre>
+<p>Again, if we removed the <code>* value</code> part of that code each of our blobs would be regular n-sided polygons, and if it weren’t for the fact that we only know the shape’s size when <code>path(in:)</code> gets called we could calculate the polygon’s points once in the initializer.</p>
+<p>That defines a single irregular polygon shape, but in order to make it move on the screen we need to wrap it in a SwiftUI view that has an animation in place. This is much simpler, but still has a few tricks up its sleeve:</p>
+<ol>
+<li>When the view is created we will immediately fill a <code>points</code> array with 8 random numbers between 0.8 and 1.2. These will be used for the polygon.</li>
+<li>The view will have a timer firing once a second, and each time it fires we’ll create the points for our polygon.</li>
+<li>Because we’ll have multiple lava bubbles at the same time, we’ll add a 1-second tolerance to our timer so iOS can definitely coalesce them – rather than firing one timer, then waiting a split second and firing another, iOS will be able group them all together so they fire at the same time, which is more efficient.</li>
+<li>We’ll attach an ease-in-out animation to our polygon shape, but it will have a 3-second duration.</li>
+</ol>
+<p>Yes, the timer fires three times as fast as the animation takes to complete, which is intentional – it would look strange if one animation completed fully before the next one started, so this way SwiftUI will always be interpolating our animations smoothly. It’s a great little trick, but really effective as you’ll see!</p>
+<p>Add this new view now:</p>
+<pre><code class="language-swift">struct AnimatingPolygon: View {
+    @State private var points = Self.makePoints()
+    @State private var timer = Timer.publish(every: 1, tolerance: 1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        AnimatablePolygonShape(points: points)
+            .animation(.easeInOut(duration: 3), value: points)
+            .onReceive(timer) { date in
+                points = Self.makePoints()
+            }
+    }
+
+    static func makePoints() -&gt; [Double] {
+        (0..&lt;8).map { _ in .random(in: 0.8...1.2) }
+    }
+}</code></pre>
+<p>And that’s it! That completes all the major code changes to make the more advanced lava lamp effect work.</p>
+<p>To see it in action, we need to change one tiny part of <code>ContentView</code>: in the symbols for the <code>Canvas</code> view, change <code>Circle()</code> to <code>AnimatingPolygon()</code>, like this:</p>
+<pre><code class="language-swift">ForEach(particleSystem.particles) { particle in
+    AnimatingPolygon()
+        .frame(width: particle.size, height: particle.size)
+}</code></pre>
+<p>Now give it a try and see what you think – you should see our lava blobs now gently change shape all by themselves, even without colliding with other blobs. </p>
+<p><img src="../Assets/lava3.png" alt="Our lava lamp effect now uses shapes that are not perfectly circular." /></p>
+<p>If you want to see the effect more clearly, try reducing the particle system count down to 5 or so, or dragging the blur slider down to 0 so you see our irregular polygons rather than the smoothed out blobs.</p>
+<p>Hopefully I managed to find the right balance between mathematical accuracy and explanations that are easy to understand, but more importantly I hope you appreciate the final effect!</p>
+<p><img src="../Assets/lava4.png" alt="If you turn off the blurring, you can see our regular polygons more clearly." /></p><h2>Blurred backgrounds</h2>
+<p>We’ve looked at lots of custom drawing using <code>Canvas</code>, but you can create some really effective results just with plain old shapes and animations. To demonstrate this, I want to show you how to we can create a soothing background animation without even coming close to needing <code>Canvas</code>.</p>
+<!-- VIMEO: 789623668 7:44 -->
+<p>To make this work we’re going to create a new SwiftUI view called <code>BackgroundBlob</code>, which will have a random alignment on the screen and a random color. Inside there we need several modifiers:</p>
+<ol>
+<li>The frame will be random between 200 and 500 wide, and 200 and 500 high.</li>
+<li>That frame will be wrapped in a second frame using the random alignment, so each blob will be placed at a random screen corner.</li>
+<li>We’ll then use <code>offset()</code> to push the blob randomly between -400 and +400 points both horizontally and vertically.</li>
+<li>We can then rotate the blob by some amount, using a looping animation to make it happen smoothly and continuously.</li>
+<li>As soon as the blob is shown, we’ll adjust its rotation amount so the animation is triggered.</li>
+</ol>
+<p>The key to this effect is rotating <em>after</em> the offset, which causes the view to be rotated around its original location so that it moves in interesting ways.</p>
+<p>Create a new SwiftUI view called <code>BackgroundBlob</code>, then give it this code:</p>
+<pre><code class="language-swift">struct BackgroundBlob: View {
+    @State private var rotationAmount = 0.0
+    let alignment: Alignment = [.topLeading, .topTrailing, .bottomLeading, .bottomTrailing].randomElement()!
+    let color: Color = [.blue, .cyan, .indigo, .mint, .purple, .teal].randomElement()!
+
+    var body: some View {
+        Ellipse()
+            .fill(color)
+            .frame(width: .random(in: 200...500), height: .random(in: 200...500))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+            .offset(x: .random(in: -400...400), y: .random(in: -400...400))
+            .rotationEffect(.degrees(rotationAmount))
+            .animation(.linear(duration: .random(in: 2...4)).repeatForever(), value: rotationAmount)
+            .onAppear {
+                rotationAmount = .random(in: -360...360)
+            }
+    }
+}</code></pre>
+<p><strong>Tip:</strong> I’ve given the animations a very fast duration between 2 and 4 seconds, and also thrown in a bright purple color that really stands out. That’s intentional because I want to really drive home how the effect works, but in practice you’ll want to use 20 and 40 to get something much more sedate, and you might also want to tweak the color palette too.</p>
+<p>To get the full effect, we need to layer many of those background blobs on top of each other in a <code>ZStack</code> with a solid background color, so replace your current <code>ContentView</code> code with this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    var body: some View {
+        ZStack {
+            ForEach(0..&lt;15) { _ in
+                BackgroundBlob()
+            }
+        }
+        .background(.blue)
+    }
+}</code></pre>
+<p>Now try running it and see what you think! You should see a whole bunch of ellipses swirling around on the screen, and it won’t look anything at all like the soothing background animation I promised.</p>
+<p><img src="../Assets/background-blur1.png" alt="Lots of ellipses filled with different colors." /></p>
+<p>Fortunately, you’re just one line of code away from the final result, because we just need to add a blur to each of the circles to make the blend together nicely.</p>
+<p>So, add this below the <code>onAppear()</code> modifier in <code>BackgroundBlob</code>:</p>
+<pre><code class="language-swift">.blur(radius: 75)</code></pre>
+<p>Now you should find all the colors mix together in more interesting ways, and in particular using blobs that are the same blue color as the background causes our shapes to get cut out in interesting ways.</p>
+<p><img src="../Assets/background-blur2.png" alt="A background blur in a range of subtly different colors." /></p>
+<p>Again, I’ve specifically chosen a fast animation and a bright purple in order to make the effect more obvious – at the very least you’ll probably want to adjust the animation to a range between 20 and 40 seconds to get something gentler. You might also want to adjust the color palette to be more harmonious, or on the other hand you might want something outrageously bright like this:</p>
+<pre><code class="language-swift">let color: Color = [.blue, .blue, .blue, .cyan, .indigo, .mint, .orange, .pink, .purple, .red, .teal, .yellow].randomElement()!</code></pre>
+<p>Regardless of which approach you take, I think it’s a delightfully simple effect and shows just how much work SwiftUI can do for us!</p>
+<p><img src="../Assets/background-blur3.png" alt="A background blur in a range of very bright colors." /></p><h2>Magic with SpriteKit</h2>
+<p>Some people will see SpriteKit in this chapter title and skip right by, which is sad because we’re about to make something absolutely magical.</p>
+<!-- VIMEO: 789624152 28:16 -->
+<p>You see, SpriteKit and SceneKit are Apple frameworks that are backed by Metal, which is Apple’s high-performance 3D rendering framework. This means SpriteKit is able to use Metal to create some extraordinarily advanced effects, and of course SwiftUI is able to embed SpriteKit scenes right into our view hierarchies.</p>
+<p>To demonstrate this, we’re going to build a water rippling effect: we’re going to write code that makes any SwiftUI views have animated ripples, like they are being viewed through water. This takes a bit of thinking because it involves multiple parts:</p>
+<ol>
+<li>We’ll have a fragment shader, which is the named used for a tiny program able to manipulate what is effectively a single pixel in a texture. Modern CPUs have hundreds or even thousands of tiny GPU cores dedicated to running these shaders, which means a shader can potentially run hundreds of millions of times every second.</li>
+<li>We’ll run that program inside an <code>SKScene</code> subclass, which is the SpriteKit equivalent to <code>View</code>.</li>
+<li>That <code>SKScene</code> subclass will be rendered from inside a SwiftUI view, which will make sure it’s configured correctly.</li>
+<li>We’ll then render that view inside another, adding some controls so you can experiment with the water effect.</li>
+</ol>
+<p>That sounds like a lot of work because it <em>is</em> a lot of work, but trust me: this effect is incredible, and most definitely worth it.</p>
+<p><strong>Tip:</strong> If you’re a coffee drinker, make a brew now – there’s quite a lot to digest here.</p>
+<p>To get started, add <code>import SpriteKit</code> to the top of your file. Now add the following the following class:</p>
+<pre><code class="language-swift">class WaterScene: SKScene {
+}</code></pre>
+<p>This scene needs to have three properties: one for the sprite it will display, which will be our SwiftUI view with the water effect applied, and a second the <code>UIImage</code> we want to place inside there. We’ll be making that image dynamically, but we still need to store it somewhere.</p>
+<p><strong>Important:</strong> <code>UIImage</code> is available only iOS, watchOS, and macOS Catalyst. If you intend to target macOS, use <code>NSImage</code> instead.</p>
+<p>Add these two properties to the water scene now:</p>
+<pre><code class="language-swift">private let spriteNode = SKSpriteNode()
+var image: UIImage?</code></pre>
+<p>I mentioned a third property, and this is the tricky one: we need to create our shader, which means writing some fragment shader code. This is <em>not</em> Swift code – it’s much, much lower-level than that, because of the need to run literally millions of times every second.</p>
+<p>SpriteKit lets us write shaders either in GLSL (the OpenGL Shading Language) or MSL (the Metal shading language). Both these two get compiled on the device when the app runs, so it can be fully optimized for whatever hardware it’s running on.</p>
+<p>Of the two options, GLSL is <em>significantly</em> simpler than MSL, and helpfully the system will automatically convert GLSL to MSL when compiling our shader. So, we’ll be using GLSL here – it’s just as fast, but <em>way</em> less code for us.</p>
+<p>Go ahead and add this property to the water scene:</p>
+<pre><code class="language-swift">let waterShader = SKShader(source: """
+void main() {
+    // more code to come
+}
+""")</code></pre>
+<p>That creates a <code>main()</code> function in our shader, with a single comment inside. We’re going to write that line by line, so I can explain what it all does. Before I dive into the code, though, I want to summarize how the effect works:</p>
+<ol>
+<li>Imagine a grid of pixels.</li>
+<li>Our shader will effectively be run on every pixel in that grid.</li>
+<li>It will be given the full grid, along with the X/Y coordinates it’s supposed to use.</li>
+<li>Rather than returning pixel at the X/Y coordinate that was requested, we will instead return a different pixel from a nearby coordinate – we’re simulating the water refracting light. </li>
+<li>Which nearby coordinate we choose depends on the control settings the user provides.</li>
+</ol>
+<p>All set?</p>
+<p>Okay, the first step is to figure out how fast we want our effect to happen. This can be done by reading two values that will be passed in externally: <code>u_time</code> will tell us how much time has passed since the shader was created, and <code>u_speed</code> will tell us how fast the user has requested for the water to move. If we multiply those two together we are effectively making time move faster, so the water will ripple more quickly.</p>
+<p>Put this in your <code>main()</code> function now:</p>
+<pre><code class="language-swift">float speed = u_time * u_speed;</code></pre>
+<p>Next we need to decide which pixel we’re going to read. Here we need to use several more external values: <code>v_tex_coord</code> will tell us which pixel we were asked to read, <code>u_frequency</code> will contain how fast the user wants ripples to be created, and <code>u_strength</code> will tell us how strong the user wants the effect to be.</p>
+<p>Figuring out which pixel to use involves a small amount of mathematics, so let me break it down:</p>
+<ul>
+<li>We already set <code>speed</code> to the current time multiplied by how fast the user wants the ripples to happen.</li>
+<li>If we take multiply that speed by the ripple frequency it means the pixel we choose will change faster, creating more or fewer ripples.</li>
+<li>We don’t want all the pixels to change uniformly: if they all moved up by one or down by three it would look like the whole image was moving up a bit rather than ripples. </li>
+<li>So, we’ll add the pixel’s original X coordinate to <code>speed</code> first, <em>then</em> multiply by frequency. </li>
+<li>We’ll put the result of that operation through <code>cos()</code> to get a value between -1 and 1 telling us which pixel direction we want to move in.</li>
+<li>Finally, we’ll multiply that by the strength the user asked for.</li>
+</ul>
+<p>Here’s a worked example, assuming our X coordinate is 22, our speed is 8, our frequency is 4 and our strength is 2:</p>
+<ul>
+<li>We add the X coordinate to our speed, making 30.</li>
+<li>We multiply that by frequency, making 120.</li>
+<li>We calculate the cosine of that to produce some long number that is approximately 0.81.</li>
+<li>We multiply that by strength to get 1.62.</li>
+</ul>
+<p>So, we read 1.62 pixels to the left – yes it’s not a whole number, but Metal will figure it out. Alternatively, if we were reading X:23 rather than X:22, we would get <code>cos((23 + 8) * 4) * 2</code>, which is approximately -0.19, so the pixel offset we read is slightly different, which creates the ripple effect.</p>
+<p>Add this line of code next:</p>
+<pre><code class="language-swift">v_tex_coord.x += cos((v_tex_coord.x + speed) * u_frequency) * u_strength;</code></pre>
+<p><strong>Tip:</strong> Remember, <code>v_tex_coord</code> tells us which X/Y coordinates we were asked to read.    </p>
+<p>To get the Y offset, we do the same thing as X except now using <code>sin()</code> rather than <code>cos()</code>:</p>
+<pre><code class="language-swift">v_tex_coord.y += sin((v_tex_coord.y + speed) * u_frequency) * u_strength;</code></pre>
+<p>At this point we now know exactly which pixel we want to read, so we need to read that value and send it back. GLSL provides three helpers here:</p>
+<ul>
+<li>The texture we’re working with is provided as <code>u_texture</code>.</li>
+<li>We can read a pixel from there by calling the built-in <code>texture2D()</code> function, passing a texture and a pixel coordinate.</li>
+<li>The return value from <code>texture2D()</code> will be the new color to use, and we can assign that to the special value <code>gl_FragColor</code> – that’s what SpriteKit will use for the finished pixel color for our shader.</li>
+</ul>
+<p>Add this final line to the function now:</p>
+<pre><code class="language-swift">gl_FragColor = texture2D(u_texture, v_tex_coord);</code></pre>
+<p><strong>Tip:</strong> If we try and read pixels from outside the bounds of the texture, Metal will automatically wrap them around to the other side for us. As a result, it usually works better if your SwiftUI views have a little padding around them to avoid this wrapping.</p>
+<p>I know it took a lot of explaining, but the entire function is really just this:</p>
+<pre><code class="language-swift">void main() {
+    float speed = u_time * u_speed;
+
+    v_tex_coord.x += cos((v_tex_coord.x + speed) * u_frequency) * u_strength;
+    v_tex_coord.y += sin((v_tex_coord.y + speed) * u_frequency) * u_strength;
+
+    gl_FragColor = texture2D(u_texture, v_tex_coord);
+}</code></pre>
+<p>Fragment shaders are easy to write once you get the hang of them – this one is taken from a huge library of them I wrote for my ShaderKit repository, which you can find here: <a href="https://github.com/twostraws/ShaderKit/">https://github.com/twostraws/ShaderKit/</a>.</p>
+<p>We’re done with the shader now, but we still have some SpriteKit work to do. First, when our scene loads we need to do some quick set up work:</p>
+<ul>
+<li>Give our scene a transparent background color</li>
+<li>Make it resizable to whatever size SwiftUI wants,</li>
+<li>Make sure our GLSL shader is assigned to the sprite node that will contain our rendered SwiftUI view.</li>
+<li>Add our sprite node to the scene, so it gets drawn.</li>
+</ul>
+<p>This can all be done through the <code>sceneDidLoad()</code> method, which is the SpriteKit equivalent to <code>viewDidLoad()</code> from UIKit. Add this method to the class now:</p>
+<pre><code class="language-swift">override func sceneDidLoad() {
+    backgroundColor = .clear
+    scaleMode = .resizeFill
+
+    spriteNode.shader = waterShader
+    addChild(spriteNode)
+}</code></pre>
+<p>Next we need to write an <code>updateTexture()</code> method, that will convert our <code>UIImage</code> into a texture, place it into the sprite, and make sure it’s all sized and positioned correctly.</p>
+<p>Add this method now:</p>
+<pre><code class="language-swift">func updateTexture() {
+    guard view != nil else { return }
+    guard let image else { return }
+
+    let texture = SKTexture(image: image)
+    spriteNode.texture = texture
+    spriteNode.size = texture.size()
+    spriteNode.position.x = frame.midX
+    spriteNode.position.y = frame.midY
+}</code></pre>
+<p>The very first line of <code>updateTexture()</code> checks whether our scene is currently being shown in a view, because if it isn’t we silently exit to avoid wasting time. When our scene actually is being moved into a real view, SpriteKit will call a separate method named <code>didMove(to:)</code>, and that’s our chance to call <code>updateTexture()</code> so everything gets positioned correctly.</p>
+<p>Add this now:</p>
+<pre><code class="language-swift">override func didMove(to view: SKView) {
+    updateTexture()
+}</code></pre>
+<p>That finishes all our <code>WaterScene</code> code, so we’re half way there! </p>
+<p>The next step is to create a SwiftUI view that’s responsible for creating and managing our water scene. This is the bridge between SpriteKit and the rest of our SwiftUI app – we want this thing to be neatly encapsulated so that we don’t have to worry about SpriteKit every time we use it.</p>
+<p>Start by creating a new SwiftUI view called WaterEffect, and give it this code:</p>
+<pre><code class="language-swift">struct WaterEffect&lt;Content: View&gt;: View {
+    @State private var scene = WaterScene()
+
+    var speed: Double
+    var strength: Double
+    var frequency: Double
+    @ViewBuilder var content: () -&gt; Content
+
+    var body: some View {
+    }
+}</code></pre>
+<p>That doesn’t have a real <code>body</code> property yet, but before we add that I want to explain what we have so far:</p>
+<ol>
+<li>We have a <code>WaterScene</code> instance stored as state, meaning that SwiftUI will keep it alive without watching it for changes.</li>
+<li>We have properties to store the three user-configurable effect inputs: speed, strength, and frequency.</li>
+<li>Most importantly, we also have a view builder that will generate some kind of SwiftUI content. This is what we’ll be using in our game scene.</li>
+</ol>
+<p><strong>Tip:</strong> We need to make the struct generic so that it’s able to render any kind of SwiftUI views.</p>
+<p>Inside the <code>body</code> property comes the real work. You see, our <code>content</code> property will contain a whole bunch of SwiftUI views, and we need to pass those to the water scene to render. That thing expects a <code>UIImage</code>, not SwiftUI views, so the first thing we need to do is render those SwiftUI views as an image.</p>
+<p>This can be done using the <code>ImageRenderer</code> struct, which accepts any views as its input and has a <code>uiImage</code> property that contains the resulting image.</p>
+<p>Add these two to your <code>body</code> property now:</p>
+<pre><code class="language-swift">let renderer = ImageRenderer(content: content())
+let image = renderer.uiImage</code></pre>
+<p><strong>Tip:</strong> If you’re using macOS, access the <code>nsImage</code> property rather than <code>uiImage</code>.</p>
+<p>Now that we have our view image ready to go, we can read its size or replace it with <code>.zero</code> if there was a problem:</p>
+<pre><code class="language-swift">let size = image?.size ?? .zero</code></pre>
+<p>Next we need to send all those user values into the shader. We have <code>speed</code>, <code>strength</code>, and <code>frequency</code> as properties of this view, and our shader expects <code>u_speed</code>, <code>u_strength</code>, and <code>u_frequency</code> to be provided in order to work. All those “u” names are there for a reason: these are called <em>uniforms</em>, which are the name for fixed values we assign to a shader to customize it. These are specified by name and value, with the names matching the names used inside the shader code.</p>
+<p>There is one small complication here, but it’s best explained after you see the code. Add this to your <code>body</code> property next:</p>
+<pre><code class="language-swift">scene.waterShader.uniforms = [
+    SKUniform(name: "u_speed", float: Float(speed)),
+    SKUniform(name: "u_strength", float: Float(strength) / 20.0),
+    SKUniform(name: "u_frequency", float: Float(frequency))
+]</code></pre>
+<p>Do you see the complication? Rather than sending our <code>strength</code> value in directly, we divide it by 20 to make it a lot smaller – we only need very small offsets to make this work, but it’s hard to work with very small values.</p>
+<p>Moving on, we can now assign our new image to the <code>scene</code>, and call its <code>updateTexture()</code> method:</p>
+<pre><code class="language-swift">scene.image = image
+scene.updateTexture()</code></pre>
+<p>Finally, we can send back a new <code>SpriteView</code> with that scene in place, making sure to enable transparency on it and also give it a frame matching our rendered view’s size:</p>
+<pre><code class="language-swift">return SpriteView(scene: scene, options: .allowsTransparency)
+    .frame(width: size.width, height: size.height)</code></pre>
+<p>You’ll be pleased to know we’re now effectively done with our water code – almost everything from now on is just using it somehow. </p>
+<p>Our <code>WaterEffect</code> view is capable of rendering any kind of SwiftUI view, so we’re going to create a little sandbox that renders adds some user customization points.</p>
+<p>Replace your current <code>ContentView</code> with this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var text = "Hello"
+    @State private var speed = 0.5
+    @State private var strength = 0.5
+    @State private var frequency = 5.0
+
+    var body: some View {
+        VStack {
+            WaterEffect(speed: speed, strength: strength, frequency: frequency) {
+                // Views to render here
+            }
+
+            TextField("Enter a message", text: $text)
+                .textFieldStyle(.roundedBorder)
+
+            LabeledContent("Speed") {
+                Slider(value: $speed)
+            }
+
+            LabeledContent("Strength") {
+                Slider(value: $strength)
+            }
+
+            LabeledContent("Frequency") {
+                Slider(value: $frequency, in: 5...25)
+            }
+        }
+        .padding()
+    }
+}</code></pre>
+<p>What should go in place of that <code>// Views to render here</code> comment? It’s down to you! Something like this is a good test of the effect:</p>
+<pre><code class="language-swift">Circle()
+    .fill(.red)
+    .frame(width: 150, height: 150)
+    .padding()
+    .overlay(Circle().stroke(.red, lineWidth: 4))
+    .overlay(Text(text).font(.title).foregroundColor(.white))
+    .padding()</code></pre>
+<p><strong>Reminder:</strong> Having some padding around your view is a good idea, because it avoids Metal wrapping pixel coordinates around at the edges.</p>
+<p><img src="../Assets/glsl.png" alt="A SwiftUI circle with some text on top, warped as if viewed through a water ripple." /></p>
+<p>Now try running the effect and see what you think! You’ll see you can type into the text box to have the water effect update immediately, and of course dragging the sliders around is also instant. You might also notice how low the CPU usage is – Metal is <em>fast</em>!</p>
+<p>There’s one last thing I want to do before we’re done, and it’s to fix a small problem you might not have even noticed. You see, when using <code>ImageRenderer</code> to convert views into images, SwiftUI will use an image scale of 1.0, which means a 400x400 view will be rendered at 400x400 pixels. That might sound good, but keep in mind that all modern devices have screen resolutions that are either 2x or 3x resolution, which means on an iPhone 14 a 400x400 view should render into a 1200x1200 image.</p>
+<p>To fix this, we need to add a property to the <code>WaterEffect</code> view that will read the correct scale for the display:</p>
+<pre><code class="language-swift">@Environment(\.displayScale) var displayScale</code></pre>
+<p>Now we can assign that to the image renderer like this:</p>
+<pre><code class="language-swift">let renderer = ImageRenderer(content: content())
+renderer.scale = displayScale</code></pre>
+<p>It’s a small difference, but it does mean the rendered SwiftUI views will look pin sharp now, just as nature intended.</p>
+<p>That’s our code all finished now, so go and experiment! And if you’re feeling <em>really</em> brave, try adapting some of the other effects in <a href="https://github.com/twostraws/ShaderKit">https://github.com/twostraws/ShaderKit</a> – you’ll see a whole bunch of them in the Shaders directory.</p>		</div>
+
+		<p style="text-align: center;"><a href="../index.html">Back to Table of Contents</a></p>
+
+		<p style="text-align: center; margin-top: 40px;">Copyright &copy; 2023 Paul Hudson, <a href="http://www.hackingwithswift.com">hackingwithswift.com</a>.<br /> <a href="http://twitter.com/twostraws">You should follow me on Twitter</a>.</p>
+	</body>
+
+	<script src="../Assets/prism.js"></script>
+</html>

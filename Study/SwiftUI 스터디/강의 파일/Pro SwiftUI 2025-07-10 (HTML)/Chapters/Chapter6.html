@@ -1,0 +1,403 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Performance - Pro SwiftUI</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<link rel="stylesheet" href="../Assets/project.css">
+		<link rel="stylesheet" href="../Assets/prism.css">
+	</head>
+
+	<body>
+		<p style="text-align: center;"><img id="logo" src="../Assets/logo.png" alt="Pro SwiftUI" width="560" /></p>
+
+		<div id="container">
+<h1>Performance</h1><h2>Delaying work…</h2>
+<p>There are all sorts of tips to help you make your SwiftUI code as fast as possible, but the best place to start is with this rule: the fastest code is the code that never executes. In SwiftUI terms this means taking steps to skip work where possible, or at least <em>delaying</em> work as much as possible.</p>
+<!-- VIMEO: 789626008 9:40 -->
+<p>For example, if you’re updating your user interface as the user interacts with it, does it need to update for every single small change the user makes – for every letter they types, or even pixel they drag a slider? If you’re generating a QR code from their data, or perhaps even using the SpriteKit water effect we made in an earlier chapter, re-rendering for every pixel of a slider drag is clearly overkill.</p>
+<p>For many operations, you’ll often find that introducing a small debounce dramatically improves performance while sacrificing little to none of your user experience. Debouncing is the practice of waiting for a certain amount of time before taking an action. For example, if we’re debouncing a text field for 1 second, the user needs to stop typing for a full second before we update our app state – they can type as much as they want and no work will happen until they finally stop.</p>
+<p>Even a debounce as low as 0.1 – a tenth of a second! – can lead to huge performance improvements, because the alternative might be updating views as 120fps, which equates to just 0.008 of a second.</p>
+<p>We can implement a simple generic debounce system using Combine, which will:</p>
+<ul>
+<li>Be generic over some kind of <code>T</code>, because we don’t care what kind of data we’re trying to debounce.</li>
+<li>Have two published properties: one for the input value, and one for the output. The input property will always be the latest value, and the output property will be the most recently debounced version.</li>
+<li>Have a private <code>AnyCancellable</code> property that stores our actual debouncing work. This comes from the Combine framework, and allows us to cancel the work if needed.</li>
+</ul>
+<p>Start with this:</p>
+<pre><code class="language-swift">import Combine
+
+class Debouncer&lt;T&gt;: ObservableObject {
+    @Published var input: T
+    @Published var output: T
+
+    private var debounce: AnyCancellable?
+}</code></pre>
+<p>We need to write an initializer that accepts two values from the user: the initial value to use for both the input and output (because they will be the same to start with), and also how long we want our debounce to wait for.</p>
+<p>The way this works is simple: elsewhere in SwiftUI we’ll adjust the <code>input</code> property directly, but we’ll attach to that Combine <code>debounce()</code> and <code>sink()</code> operators so that after a period of time has passed we copy the value from <code>input</code> into <code>output</code>. Because <code>output</code> uses <code>@Published</code>, changing it will automatically cause any observing SwiftUI views to reinvoke their <code>body</code> property.</p>
+<p>Go ahead and add this initializer now:</p>
+<pre><code class="language-swift">init(initialValue: T, delay: Double = 1) {
+    self.input = initialValue
+    self.output = initialValue
+
+    debounce = $input
+        .debounce(for: .seconds(delay), scheduler: DispatchQueue.main)
+        .sink { [weak self] in
+            self?.output = $0
+        }
+}</code></pre>
+<p>And that’s it – that’s our entire <code>Debouncer</code> class done already. To try it out, create instances of it using <code>@StateObject</code>, then bind your controls to <code>input</code> and your readouts to <code>output</code>. For example, this debounces a text field and a slider:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @StateObject private var text = Debouncer(initialValue: "", delay: 0.5)
+    @StateObject private var slider = Debouncer(initialValue: 0.0, delay: 0.1)
+
+    var body: some View {
+        VStack {
+            TextField("Search for something", text: $text.input)
+                .textFieldStyle(.roundedBorder)
+            Text(text.output)
+
+            Spacer().frame(height: 50)
+
+            Slider(value: $slider.input, in: 0...100)
+            Text(slider.output.formatted())
+        }
+    }
+}</code></pre>
+<p>I encourage you to try that out, because you’ll see how our view waits until the user pauses for a moment before reloading.</p>
+<p>For work that takes place outside of bindings, use Swift’s <code>Task</code> to spin off the work, sleep for some amount of time, then execute it after the delay finishes. This works well because if you need to schedule the same work while the sleep is happening, you can cancel the task and schedule it again – it’s debouncing, just done without Combine.</p>
+<p>As an example, this view model can do some work immediately, or schedule some work to happen after a 3-second delay:</p>
+<pre><code class="language-swift">class ViewModel: ObservableObject {
+    private var refreshTask: Task&lt;Void, Error&gt;?
+    var workCounter = 0
+
+    func doWorkNow() {
+        workCounter += 1
+        print("Work done: \(workCounter)")
+    }
+
+    func scheduleWork() {
+        refreshTask?.cancel()
+
+        refreshTask = Task {
+            try await Task.sleep(until: .now + .seconds(3), clock: .continuous)
+            doWorkNow()
+        }
+    }
+}</code></pre>
+<p><strong>Note:</strong> If you need to support older versions of Apple’s operating systems, use <code>Task.sleep(nanoseconds: 3_000_000_000)</code> to get the same result.</p>
+<p>That view model exposes both <code>scheduleWork()</code> and <code>doWorkNow()</code>, so you can choose which you use depending on circumstances:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @StateObject private var viewModel = ViewModel()
+
+    var body: some View {
+        VStack {
+            Button("Do Work Soon", action: viewModel.scheduleWork)
+            Button("Do Work Now", action: viewModel.doWorkNow)
+        }
+    }
+}</code></pre><h2>…or skipping it entirely</h2>
+<p>Delaying work is a good start, not least because it helps your apps load faster and keeps your views responsive more of the time. Even better is avoiding work entirely – looking for ways to skip work that isn’t necessary, beyond things I’ve covered elsewhere such as preferring ternary conditionals to <code>if</code> in a view builder.</p>
+<!-- VIMEO: 789626695 7:20 -->
+<p>For example, it’s common to write SwiftUI code that interacts with classes that either don’t conform to <code>ObservableObject</code>, or <em>do</em> conform but we don’t happen to care in this circumstance. In these places you should use <code>@State</code> to store a reference to the class, as opposed to either <code>let</code> (which would destroy and reallocate the class instance every time the view was recreated) or <code>@StateObject</code> (which would monitor the object for changes).</p>
+<p>You can see this in action in the following code, which uses <code>@State</code> to store a Core Image context – something that is resource-intensive to create, and so is best kept alive:</p>
+<pre><code class="language-swift">import CoreImage
+import CoreImage.CIFilterBuiltins
+import SwiftUI
+
+struct ContentView: View {
+    @State private var context = CIContext()
+    @State private var name = "Paul"
+
+    var body: some View {
+        VStack {
+            TextField("Enter your name", text: $name)
+                .textFieldStyle(.roundedBorder)
+                .padding()
+
+            Image(uiImage: generateQRCode(from: "\(name)"))
+                .resizable()
+                .interpolation(.none)
+                .frame(width: 200, height: 200)
+        }
+    }
+
+    func generateQRCode(from string: String) -&gt; UIImage {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(string.utf8)
+
+        if let output = filter.outputImage {
+            if let cgImage = context.createCGImage(output, from: output.extent) {
+                return UIImage(cgImage: cgImage)
+            }
+        }
+
+        return UIImage(systemName: "xmark.circle") ?? UIImage()
+    }
+}</code></pre>
+<p>Using <code>@State</code> like this is effectively using it as a cache – we’re storing something persistently, but not trying to do any change tracking.</p>
+<p>Another common place where wasted work happens is in <code>onAppear()</code>. First I should say that using <code>onAppear()</code> is broadly a good thing: it’s much, <em>much</em> better to take work out of view initializers and put it into <code>onAppear()</code> where possible, because initializers are called far more frequently than <code>onAppear()</code>.</p>
+<p>That being said, <code>onAppear()</code> is still called whenever a view is presented, so if you’re putting work in there you might find it’s being repeated pointlessly. You can see the problem in this example code:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    var body: some View {
+        TabView {
+            ForEach(1..&lt;6) { i in
+                ExampleView(number: i)
+                    .tabItem { Label(String(i), systemImage: "\(i).circle") }
+            }
+        }
+    }
+}
+
+struct ExampleView: View {
+    let number: Int
+
+    var body: some View {
+        Text("View \(number)")
+            .onAppear {
+                print("View \(number) appearing")
+            }
+    }
+}</code></pre>
+<p>When that runs, you’ll see that moving between the tabs repeats the <code>onAppear()</code> code, even when you’ve already visited a tab. Is that what you want? If so, you have nothing to worry about, but if you were using <code>onAppear()</code> as a way to delay initialization of values for this view, you might find you only really want that work to happen once.</p>
+<p>The good news is that we can do better: we can create an <code>onFirstAppear()</code> modifier that runs its closure only when a view appears for the very first time:</p>
+<pre><code class="language-swift">struct OnFirstAppearModifier: ViewModifier {
+    @State private var hasLoaded = false
+    var perform: () -&gt; Void
+
+    func body(content: Content) -&gt; some View {
+        content.onAppear {
+            guard hasLoaded == false else { return }
+            hasLoaded = true
+            perform()
+        }
+    }
+}
+
+extension View {
+    func onFirstAppear(perform: @escaping () -&gt; Void) -&gt; some View {
+        modifier(OnFirstAppearModifier(perform: perform))
+    }
+}</code></pre>
+<p>And now you have the option of using <code>onAppear()</code> when you want some code to <em>always</em> run on appearance, or <code>onFirstAppear()</code> when you want to do the work only once:</p>
+<pre><code class="language-swift">Text("View \(number)")
+    .onFirstAppear {
+        print("View \(number) appearing")
+    }</code></pre>
+<p>Finally, if you’re targeting multiple platforms, don’t be afraid to write a handful of platform-specific modifiers that lock off certain code on a case-by-case basis. For example, if you want some text to have zero padding on watchOS, you can add a method like this to make such a change apply only to watchOS:</p>
+<pre><code class="language-swift">public extension View {
+    func watchOS&lt;Content: View&gt;(_ modifier: @escaping (Self) -&gt; Content) -&gt; some View {
+        #if os(watchOS)
+        modifier(self)
+        #else
+        self
+        #endif
+    }
+}</code></pre>
+<p>That does nothing at all for all operating systems apart from watchOS, so the Swift compiler will optimize it out at build time. Use it like this:</p>
+<pre><code class="language-swift">Text("Hello, world!")
+    .watchOS {
+        $0.padding(0)
+    }</code></pre><h2>Watching for changes</h2>
+<p>One of the most common SwiftUI performance sinks is recomputing views as a result of change notifications. When these happen as a result of <code>@State</code> changes it’s usually obvious: the user typed into your text field or dragged your slider, and so your view’s <code>body</code> property needs to be reinvoked.</p>
+<!-- VIMEO: 789627191 11:41 -->
+<p>That kind of change is unavoidable for the most part. Where things get more complex is when some external object changes and your view is recomputed – what changed and why?</p>
+<p>There are a handful of techniques I use here, any or all of which might prove useful to you depending on the circumstances.</p>
+<p>First, here’s a simple set up that triggers external notifications on a regular basis:</p>
+<pre><code class="language-swift">class AutorefreshingObject: ObservableObject {
+    var timer: Timer?
+
+    init() {
+        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            self.objectWillChange.send()
+        }
+    }
+}
+
+struct ContentView: View {
+    @StateObject private var viewModel = AutorefreshingObject()
+
+    var body: some View {
+        Text("Example View Here")
+    }
+}</code></pre>
+<p>If you run that you’ll see it looks and works just like any other SwiftUI view – there’s no indication it’s doing vast amounts of work thanks to the change notifications coming in.</p>
+<p>To address this, I want to introduce you to a neat trick I learned from Peter Steinberger, which is to create a random color extension such as this one:</p>
+<pre><code class="language-swift">extension ShapeStyle where Self == Color {
+    static var random: Color {
+        Color(
+            red: .random(in: 0...1),
+            green: .random(in: 0...1),
+            blue: .random(in: 0...1)
+        )
+    }
+}</code></pre>
+<p>Use it like this:</p>
+<pre><code class="language-swift">Text("Example View Here")
+    .background(.random)</code></pre>
+<p>With that in place it becomes obvious that are view is being recomputed, because the text will literally flash through colors on the screen:</p>
+<p>That doesn’t explain <em>why</em> something changed, though, and for that you need the <code>View._printChanges()</code> method. This can be called from inside any view’s <code>body</code> property, and will automatically print what triggered a change.</p>
+<p>Because of the way Swift’s result builders work, to use <code>_printChanges()</code> you either need to assign it to a value such as <code>_</code> (underscore), or add an explicit return to your view body. In the first case you’d write this:</p>
+<pre><code class="language-swift">var body: some View {
+    let _ = Self._printChanges()
+    Text("Example View Here")
+}</code></pre>
+<p>And in the second this:</p>
+<pre><code class="language-swift">var body: some View {
+    Self._printChanges()
+    return Text("Example View Here")
+}</code></pre>
+<p>Either way, you’ll see output such as <strong>ContentView: _viewModel changed</strong>, which is telling us that the <code>body</code> property was reinvoked because that particular object announced a change.</p>
+<p>This kind of performance problem is particularly common when apps grow over time. When you’re just starting out with a small app, it’s common to create your view model right in your <code>App</code> struct, and post it into the SwiftUI environment for all your views to share. But as your app grows and more views depend on that data, you might come to find that a small change in one view causes a cascade of refreshes to happen elsewhere.</p>
+<p>Like I said when we looked at environment keys, every time you make a view use <code>@ObservableObject</code>, you are effectively creating a dependency on that data – you’re telling SwiftUI to refresh your view when that data changes, even if your view doesn’t actually care about the precise thing that changed. </p>
+<p>This isn’t a theoretical problem, and in fact it’s something I hit with my own Control Room app for macOS – it’s on GitHub here: <a href="https://github.com/twostraws/ControlRoom">https://github.com/twostraws/ControlRoom</a>. This project started out small but grew extensively over time, and suddenly <code>@AppStorage</code> values that were fine before were causing significant performance problems – typing into a text field took a whole second for every character to appear! </p>
+<p>Do you need to make your view dependent on an external object? If so, does it need to be every property on that object, or just part of it? We looked at how to solve this in the environment keys chapter, so if you find your views are refreshing more often than you’d like that’s the best place to start.</p>
+<p>If you’re stuck – if you have a view that’s changing and you’re not sure why even with <code>_printChanges()</code> – then I recommend adding a handful of <code>View</code> extensions that let us inject pieces of code directly into SwiftUI’s views.</p>
+<p>Here are the three I rely on the most:</p>
+<pre><code class="language-swift">extension View {
+    func debugPrint(_ value: @autoclosure () -&gt; Any) -&gt; some View {
+        #if DEBUG
+        print(value())
+        #endif
+
+        return self
+    }
+
+    func debugExecute(_ function: () -&gt; Void) -&gt; some View {
+        #if DEBUG
+        function()
+        #endif
+
+        return self
+    }
+
+    func debugExecute(_ function: (Self) -&gt; Void) -&gt; some View {
+        #if DEBUG
+        function(self)
+        #endif
+
+        return self
+    }
+}</code></pre>
+<p>The first of those prints a message when the modifier is executed, the second runs arbitrary code, and the third runs arbitrary code while also giving access to the current view. All three use <code>#if DEBUG</code> to ensure the diagnostic code never leaves Xcode – as soon as you ship these apps to the App Store that code will be compiled out completely.</p>
+<p>If you’ve tried background colors, checked <code>_printChanges()</code>, and even tried using <code>debugExecute()</code> to check what’s happening, and you’re <em>still</em> not sure where the problem is, there’s one last option: adding an <code>assert()</code> modifier to <code>View</code>, so that you can check exactly what’s happening and hopefully catch the problem.</p>
+<p>It looks like this:</p>
+<pre><code class="language-swift">extension View {
+    public func assert(
+      _ condition: @autoclosure () -&gt; Bool,
+      _ message: @autoclosure () -&gt; String = String(),
+      file: StaticString = #file, line: UInt = #line
+    ) -&gt; some View {
+        Swift.assert(condition(), message(), file: file, line: line)
+        return self
+    }
+}</code></pre>
+<p>That uses <code>@autoclosure</code> to avoid doing any work that isn’t needed, and also calls down to Swift’s internal <code>assert()</code> function that gets compiled out of App Store releases.</p>
+<p>Use it like this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var counter = 0
+    let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Text("Example View Here")
+            .onReceive(timer) { _ in
+                counter += 1
+            }
+            .assert(counter &lt; 50, "Timer exceeded")
+    }
+}</code></pre>
+<p>That adds an explicit, code-level check that <code>counter</code> must be less than 50 at all times, and as soon as the view body is reinvoked when that <em>isn’t</em> true Xcode will stop execution and print the message “Timer exceeded”.</p><h2>The SwiftUI cycle of events</h2>
+<p>If there is one thing – just <em>one</em> thing – I would recommend everyone do in order to better understand the sequence of events SwiftUI goes through when working with all our views and modifiers, and in doing so get a much better idea of what code is being run when our apps execute, it would be this: explore the SwiftUI cycle of events.</p>
+<!-- VIMEO: 789628192 3:52 -->
+<p>That means creating a bunch of test structs that represent your app, some views, modifiers, properties, initializers, etc, and make them all print out messages explaining what’s going on. It takes only a few minutes to do, and yet most people will be surprised what they see when it runs.</p>
+<p>If you’re not sure where to start, something like this is a great beginning:</p>
+<pre><code class="language-swift">@main
+struct MyApp: App {
+    @State private var property = ExampleProperty(location: "App")
+
+    var body: some Scene {
+        print("In App.body")
+
+        return WindowGroup {
+            NavigationStack {
+                ContentView()
+            }
+        }
+    }
+
+    init() {
+        print("In App.init")
+    }
+}
+
+struct ExampleProperty {
+    init(location: String) {
+        print("Creating ExampleProperty from \(location)")
+    }
+}
+
+struct ExampleModifier: ViewModifier {
+    init(location: String) {
+        print("Creating ExampleModifier from \(location)")
+    }
+
+    func body(content: Content) -&gt; some View {
+        print("In ExampleModifier.body()")
+        return content
+    }
+}
+
+struct ContentView: View {
+    @State private var property = ExampleProperty(location: "ContentView")
+
+    var body: some View {
+        print("In ContentView.body")
+
+        return NavigationLink("Hello, world!") {
+            DetailView()
+        }
+        .modifier(ExampleModifier(location: "ContentView"))
+        .task { print("In first task") }
+        .task { print("In second task") }
+        .onAppear { print("In first onAppear") }
+        .onAppear { print("In second onAppear") }
+    }
+
+    init() {
+        print("In ContentView.init")
+    }
+}
+
+struct DetailView: View {
+    @State private var property = ExampleProperty(location: "DetailView")
+
+    var body: some View {
+        print("In DetailView.body")
+
+        return Text("Hello, world!")
+            .modifier(ExampleModifier(location: "DetailView"))
+            .task { print("In detail task") }
+            .onAppear { print("In detail onAppear") }
+    }
+
+    init() {
+        print("In DetailView.init")
+    }
+}</code></pre>
+<p>When that runs you’ll see a whole lot of output, and while you use it some more will come out. In particular, watch out for:</p>
+<ol>
+<li>The <code>App</code> property being created before <code>App.init()</code> is called.</li>
+<li>Swift running <code>DetailView.init()</code> immediately, long before we even press the button to show it. Heck, it’s run twice!</li>
+<li>The <code>ContentView.body</code> property being executed more than once.</li>
+<li>The two <code>onAppear()</code> modifiers being executed in the order they appear in the code, and the two <code>task()</code> modifiers being executed in the order they appear in the code, but <code>onAppear()</code> running before <code>task()</code>.</li>
+<li>Both the <code>onAppear()</code> and <code>task()</code> modifiers in <code>DetailView</code> only being run when the view is shown.</li>
+</ol>
+<p>The point of this exercise is to remind you that SwiftUI can create our views and reinvoke their <code>body</code> properties as often as it wants, whenever it wants – even just launching our app run <code>DetailView.init()</code> twice, and it’s not even visible. This is why it’s so absolutely critical to keep your initializers as simple as possible: do no slow work in there, and under no circumstances attempt to access network data from there!</p>
+<p>Instead, push work back into <code>onAppear()</code> or <code>task()</code> where possible, so you allow SwiftUI to call <code>init()</code> and <code>body</code> frequently without hiccups. These are called when your views are added to the active view hierarchy – when they are being placed onto the screen – and so you can be sure the work you’re doing is actually useful.</p>		</div>
+
+		<p style="text-align: center;"><a href="../index.html">Back to Table of Contents</a></p>
+
+		<p style="text-align: center; margin-top: 40px;">Copyright &copy; 2023 Paul Hudson, <a href="http://www.hackingwithswift.com">hackingwithswift.com</a>.<br /> <a href="http://twitter.com/twostraws">You should follow me on Twitter</a>.</p>
+	</body>
+
+	<script src="../Assets/prism.js"></script>
+</html>

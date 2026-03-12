@@ -1,0 +1,647 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Environment and Preferences - Pro SwiftUI</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<link rel="stylesheet" href="../Assets/project.css">
+		<link rel="stylesheet" href="../Assets/prism.css">
+	</head>
+
+	<body>
+		<p style="text-align: center;"><img id="logo" src="../Assets/logo.png" alt="Pro SwiftUI" width="560" /></p>
+
+		<div id="container">
+<h1>Environment and Preferences</h1><h2>The environment</h2>
+<p>When you apply a modifier to a view, we are most of the time creating a new view that wraps the original view to add some extra behavior or styling – this is something I’ve said a few times now, but it matters!</p>
+<!-- VIMEO: 787313919 16:29 -->
+<p>This isn’t <em>always</em> the case. One common example is <code>Text</code>, where there are a whole batch of modifiers we can apply directly to some text without creating wrapped views, like this:</p>
+<pre><code class="language-swift">Text("Tap")
+    .font(.title)
+    .foregroundColor(.red)
+    .fontWeight(.black)
+    .onTapGesture {
+        print(type(of: self.body))
+    }</code></pre>
+<p>When you tap that text in the simulator, you’ll see its type is still just <code>Text</code> – it silently just absorbs all the modifiers into itself. This is what allows us to create complex text with various fonts and colors, then use operator overloading to bring it all together into a single <code>Text</code> view. </p>
+<p>You can see this for yourself in the SwiftUI interface file – search for “internal var modifiers”, and you’ll see that all <code>Text</code> views store an array of enum cases with associated values for their modifiers. (If you forgot the <code>xed</code> command to use, and the fix in case you have problems, please see the introduction to this book!)</p>
+<p><img src="../Assets/internal-var-modifiers.png" alt="A small piece of SwiftUI interface file, showing how text absorbs modifiers." /></p>
+<p><strong>Tip:</strong> This is exactly how <code>Text</code> views have different natural sizes when changing the font – the font gets absorbed directly into the view, and is used as part of its size calculations.</p>
+<p>However, there’s a whole batch of modifiers that are more complex, because they propagate changes downwards into child views. SwiftUI doesn’t mark these out very clearly, or indeed at all, but you can see them in action if we modified our code to this:</p>
+<pre><code class="language-swift">VStack {
+    Text("Tap")
+}
+.font(.title)
+.onTapGesture {
+    print(type(of: self.body))
+}</code></pre>
+<p>Now we’re applying <code>title()</code> to the <code>VStack</code> rather than directly to <code>Text</code>, and the resulting type of our view will be very different – you’ll see <code>_EnvironmentKeyWritingModifier</code> in there.</p>
+<p>First, this dual behavior of <code>font()</code> is possible because of Swift’s approach to overload resolution, which really boils down to “the most constrained wins.” In the case of <code>font()</code>, if you look in the SwiftUI interface file you’ll see <code>func font</code> is in there twice: once on <code>Text</code>, and once on <code>View</code>. Because <code>Text</code> is the more constrained of the two (it’s one specific struct rather than a whole group of structs that conform to a protocol), when we call <code>font()</code> directly on a <code>Text</code> view we’ll get <code>Text.font()</code> rather than <code>View.font()</code>.</p>
+<p>Second, you can see exactly why <code>_EnvironmentKeyWritingModifier</code> comes back in our type when you look at the <code>font()</code> method attached to <code>View</code> rather than <code>Text</code>: it’s marked <code>@inlinable</code>, which means Swift has the option of replacing a call to this <code>View.font()</code> method with the actual body of the method – it’s able to copy the code from the method right into our view at compile time. Obviously this requires Swift to have access to the code to copy, which is why we can see exactly what SwiftUI is doing here:</p>
+<pre><code class="language-swift">@inlinable public func font(_ font: SwiftUI.Font?) -&gt; some SwiftUI.View {
+    return environment(\.font, font)
+}</code></pre>
+<p><strong>Tip:</strong> Search the SwiftUI interface for <code>return environment(\</code> to see other instances of this behavior.</p>
+<p>So, we get two different results for <code>font()</code> depending on where it’s called: for <code>Text</code> views it gets absorbed into an internal array of enum values, but for all other views it is merely syntactic sugar that silently gets converted into the following:</p>
+<pre><code class="language-swift">VStack {
+    Text("Tap")
+}
+.environment(\.font, .title)
+.onTapGesture {
+    print(type(of: self.body))
+}</code></pre>
+<p>The question is: why? Understanding the answer is the key to understanding the environment in SwiftUI: this approach lets a view modifier flow downwards through all the child views of our <code>VStack</code>, rather than just being applied to a single view – we can adjust the font of everything inside the <code>VStack</code> at once, even without the view internally realizing it was happening.</p>
+<p>The power of SwiftUI’s environment is that it flows downwards to every view contained in wherever you apply it, but views only need to read a value if they care about it.</p>
+<p>To demonstrate this, we could make a simple <code>TextField</code> wrapper that understands the concept of required fields by showing a small red asterisk next to required fields.</p>
+<p>This process takes at least two steps for every new environment key you want to add. First, we make a new struct that conforms to the <code>EnvironmentKey</code> protocol, which requires that provide a default value for times when there is nothing in the environment:</p>
+<pre><code class="language-swift">struct FormElementIsRequiredKey: EnvironmentKey {
+    static var defaultValue = false
+}</code></pre>
+<p>Second, we make an extension on <code>EnvironmentValues</code> telling the system how to read and write our setting from the environment:</p>
+<pre><code class="language-swift">extension EnvironmentValues {
+    var required: Bool {
+        get { self[FormElementIsRequiredKey.self] }
+        set { self[FormElementIsRequiredKey.self] = newValue }
+    }
+}</code></pre>
+<p>Now we can go ahead and use it. For our <code>TextField</code> wrapper this means using <code>@Environment(\.required)</code> to read the current required state in our environment, then creating the view as normal:</p>
+<pre><code class="language-swift">struct RequirableTextField: View {
+    @Environment(\.required) var required
+
+    let title: String
+    @Binding var text: String
+
+    var body: some View {
+        HStack {
+            TextField(title, text: $text)
+
+            if required {
+                Image(systemName: "asterisk")
+                    .imageScale(.small)
+                    .foregroundColor(.red)
+            }
+        }
+    }
+}</code></pre>
+<p>Now we can go ahead and use the new <code>RequirableTextField</code> view anywhere we want it, sending in the environment value for <code>\.required</code> as needed:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var firstName = ""
+
+    var body: some View {
+        Form {
+            RequirableTextField(title: "First name", text: $firstName)
+                .environment(\.required, true)
+        }
+    }
+}</code></pre>
+<p>Earlier I showed you how the <code>View.font()</code> modifier is nothing more than a wrapper around <code>.environment(\.font)</code>, and honestly this is good practice because it makes our code easier to read. In this case it would mean adding a new <code>View</code> extension like this:</p>
+<pre><code class="language-swift">extension View {
+    func required(_ makeRequired: Bool = true) -&gt; some View {
+        environment(\.required, makeRequired)
+    }
+}</code></pre>
+<p>With that in place, we can now just called <code>required()</code>, like this:</p>
+<pre><code class="language-swift">RequirableTextField(title: "First name", text: $firstName)
+    .required()</code></pre>
+<p><strong>Tip:</strong> As you can see, making the Boolean parameter have a default value of true makes for much more natural use at the call site – saying <code>required()</code> is the same as <code>required(true)</code>.</p>
+<p><img src="../Assets/required1.png" alt="A text field with a red asterisk on its side." /></p>
+<p>Now, as we’re applying <code>required()</code> directly to our custom text field, the environment approach might seem overkill – why not just pass it directly into the <code>RequirableTextField</code> initializer?</p>
+<p>Well, consider code like this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var firstName = ""
+    @State private var lastName = ""
+
+    @State private var makeRequired = false
+
+    var body: some View {
+        Form {
+            RequirableTextField(title: "First name", text: $firstName)
+            RequirableTextField(title: "Last name", text: $lastName)
+            Toggle("Make required", isOn: $makeRequired.animation())
+        }
+        .required(makeRequired)
+    }
+}</code></pre>
+<p>Now we’re making the whole form required at once, which flows the environment key downwards into each text field automatically – they could even have been in a different subview entirely, but would still have been able to access the environment data.</p>
+<p><img src="../Assets/required2.png" alt="Two text fields are now required, with a toggle switch below." /></p>
+<p>I’d like you to try making a custom environment key now: can you create one that stores a stroke width for all the shapes you want to draw? </p>
+<p>Have a go and see how you get on! I’ll add my solution below.</p>
+<p>First, we need to define the custom environment key and an extension on <code>EnvironmentValues</code>:</p>
+<pre><code class="language-swift">struct StrokeWidthKey: EnvironmentKey {
+    static var defaultValue = 1.0
+}
+
+extension EnvironmentValues {
+    var strokeWidth: Double {
+        get { self[StrokeWidthKey.self] }
+        set { self[StrokeWidthKey.self] = newValue }
+    }
+}</code></pre>
+<p>We could even add a <code>View</code> extension if you wanted:</p>
+<pre><code class="language-swift">extension View {
+    func strokeWidth(_ width: Double) -&gt; some View {
+        environment(\.strokeWidth, width)
+    }
+}</code></pre>
+<p>Now we can go ahead and use it with some drawing:</p>
+<pre><code class="language-swift">struct CirclesView: View {
+    @Environment(\.strokeWidth) var strokeWidth
+
+    var body: some View {
+        ForEach(0..&lt;3) { _ in
+            Circle()
+                .stroke(.red, lineWidth: strokeWidth)
+        }
+    }
+}</code></pre>
+<p>And then set that value at some higher point in the environment, like this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var sliderValue = 1.0
+
+    var body: some View {
+        VStack {
+            CirclesView()
+            Slider(value: $sliderValue, in: 1...10)
+        }
+        .strokeWidth(sliderValue)
+    }
+}</code></pre>
+<p><strong>Tip:</strong> We’ll be using <code>StrokeWidthKey</code> and <code>CirclesView</code> in the next chapter, so stash your code somewhere safe and put mine in its place for easier reference.</p>
+<p><img src="../Assets/stroke-width.png" alt="Three circles with red strokes, and a slider below them." /></p><h2>@Environment vs @EnvironmentObject</h2>
+<p>We can write any kind of data into environment keys, but the environment never watches for changes in observable objects. This means if you try to store a class in there then update it, the environment won’t know to update any views that are watching.</p>
+<!-- VIMEO: 787314707 14:28 -->
+<p>In practice, this makes <code>@Environment</code> more suited to value type data, as compared to <code>@EnvironmentObject</code>, which is specifically designed to store class instances – the clue is right there in the name.</p>
+<p>There are two compelling reasons why, where possible, you should aim to use simple environment keys rather than passing in environment objects.</p>
+<p>The first is simple: the <code>EnvironmentKey</code> protocol requires that we provide a default value for any custom keys we create, whereas environment objects can be missing entirely – and will trigger a hard crash in your code when this happens. Yes, in theory this is the kind of thing we should spot in development, but “should” in software development really means “might”, so why leave things up to chance?</p>
+<p>The second is a little more complex: when an observable object announces that it has changed, SwiftUI makes all views that use it get refreshed. That sounds straightforward, but it has an important impact for times when we are publishing lots of data, only some of which views might care about.</p>
+<p>To demonstrate this, we could add another custom environment key alongside the <code>StrokeWidthKey</code> we made in the previous exercise, this time to store the font that should be used for title text:</p>
+<pre><code class="language-swift">struct TitleFontKey: EnvironmentKey {
+    static var defaultValue = Font.custom("Georgia", size: 34)
+}
+
+extension EnvironmentValues {
+    var titleFont: Font {
+        get { self[TitleFontKey.self] }
+        set { self[TitleFontKey.self] = newValue }
+    }
+}</code></pre>
+<p>Again, we could make a <code>View</code> extension to make it easier to access:</p>
+<pre><code class="language-swift">extension View {
+    func titleFont(_ font: Font) -&gt; some View {
+        environment(\.titleFont, font)
+    }
+}</code></pre>
+<p>Now we can send both values into the environment, like this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var sliderValue = 1.0
+    @State private var titleFont = Font.largeTitle
+
+    var body: some View {
+        VStack {
+            CirclesView()
+            Text("Hello, world!")
+                .font(titleFont)
+
+            Slider(value: $sliderValue, in: 1...10)
+
+            Button("Default Font") {
+                titleFont = .largeTitle
+            }
+
+            Button("Custom Font") {
+                titleFont = TitleFontKey.defaultValue
+            }
+        }
+        .strokeWidth(sliderValue)
+        .titleFont(titleFont)
+    }
+}</code></pre>
+<p>That works great: the stroke width in <code>CirclesView</code> changes with the slider, and the font style in <code>ContentView</code> changes as the buttons are pressed.</p>
+<p><img src="../Assets/environment-vs-environmentobject.png" alt="Three circles with red strokes, the text Hello World, and a slider below it all." /></p>
+<p>I’d like to add one more line of code so you can see what’s going on – modify the <code>body</code> property of <code>CirclesView</code> to this:</p>
+<pre><code class="language-swift">var body: some View {
+    print("In CirclesView.body")
+
+    return ForEach(0..&lt;3) { _ in
+        Circle()
+            .stroke(.red, lineWidth: strokeWidth)
+    }
+}</code></pre>
+<p>That prints out a message every time <code>body</code> is called, which is helpful here because it lets us run the project back and see the message being printed again and again as we drag around the slider. But, importantly, it <em>won’t</em> be printed when pressing the buttons: those also change the environment, but SwiftUI knows <code>CirclesView</code> doesn’t actually use the <code>titleFont</code> environment key so it doesn’t need to reinvoke <code>body</code>.</p>
+<p>So, that’s how environment keys work, but what happens if we had used an environment object here instead? To find out, we would start by making some kind of class to store our two values together as theme data:</p>
+<pre><code class="language-swift">class ThemeManager: ObservableObject {
+    @Published var strokeWidth = 1.0
+    @Published var titleFont = TitleFontKey.defaultValue
+}</code></pre>
+<p>In <code>CirclesView</code> we aren’t going to watch for precise keys, but instead we’ll expect to receive a whole environment object of theme data:</p>
+<pre><code class="language-swift">struct CirclesView: View {
+    @EnvironmentObject var theme: ThemeManager
+
+    var body: some View {
+        print("In CirclesView.body")
+
+        return ForEach(0..&lt;3) { _ in
+            Circle()
+                .stroke(.red, lineWidth: theme.strokeWidth)
+        }
+    }
+}</code></pre>
+<p>And now in <code>ContentView</code> we would make an instance of that using <code>@StateObject</code>, the inject it into the environment:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @StateObject private var theme = ThemeManager()
+
+    var body: some View {
+        VStack {
+            CirclesView()
+            Text("Hello, world!")
+                .font(theme.titleFont)
+
+            Slider(value: $theme.strokeWidth, in: 1...10)
+
+            Button("Default Font") {
+                theme.titleFont = .largeTitle
+            }
+
+            Button("Custom Font") {
+                theme.titleFont = TitleFontKey.defaultValue
+            }
+        }
+        .environmentObject(theme)
+    }
+}</code></pre>
+<p>When you run the project now you’ll see an important difference: every time <code>titleFont</code> is set our &quot;In CirclesView.body&quot; message is printed, even though the <code>CirclesView</code> doesn’t care about it. This generates significantly more work for our views, with no actual benefit at all – the <code>body</code> property is even reinvoked if <code>titleFont</code> is set to its existing value!</p>
+<p>From a SwiftUI perspective this behavior makes absolute sense: the class is sending a change notification, so SwiftUI doesn’t really have a way of checking exactly what changed inside the view – maybe <code>strokeWidth</code> also changed as a result of <code>titleFont</code> changing.</p>
+<p>Try to think of it like this: every time you make a view use an <code>@ObservedObject</code> or an <code>@EnvironmentObject</code>, you are effectively creating a dependency on that data. It doesn’t matter if the actual body property doesn’t change as one of the <code>@Published</code> values changes, because if you recall Swift doesn’t perform tree diffing.</p>
+<p>So, when you bring together the extra safety of always having a default value and the extra performance of skipping unnecessary work, I hope you can see why using environment keys are preferable where possible!</p>
+<p>Of course, as with many things there is a middle ground: you can store your data as a shared theme, then expose it using environment key. This works when you want to be able to read and write the data in one object, but you’re still keen to avoid surprise crashes from missing data.</p>
+<p>Using this approach we might abstract our theme information into a protocol, like this:</p>
+<pre><code class="language-swift">protocol Theme {
+    var strokeWidth: Double { get set }
+    var titleFont: Font { get set }
+}</code></pre>
+<p>We can then make structs adopting that protocol, based on whatever theme requirements we have:</p>
+<pre><code class="language-swift">struct DefaultTheme: Theme {
+    var strokeWidth = 1.0
+    var titleFont = TitleFontKey.defaultValue
+}</code></pre>
+<p>Next, we’re going to wrap that in a class that is able to publish changes as the theme updates. Apps only ever have one theme active at a time, so we could implement this as a singleton:</p>
+<pre><code class="language-swift">class ThemeManager: ObservableObject {
+    @Published var activeTheme: any Theme = DefaultTheme()
+
+    static var shared = ThemeManager()
+    private init() { }
+}</code></pre>
+<p>Now we can expose all that to the environment, focusing only on the internal <code>Theme</code> struct:</p>
+<pre><code class="language-swift">struct ThemeKey: EnvironmentKey {
+    static var defaultValue: any Theme = ThemeManager.shared.activeTheme
+}
+
+extension EnvironmentValues {
+    var theme: any Theme {
+        get { self[ThemeKey.self] }
+        set { self[ThemeKey.self] = newValue }
+    }
+}</code></pre>
+<p>We need to expose this to our views in a natural way, but we can’t just make a simple <code>View</code> extension this time because we need to actually watch the <code>ThemeManager</code> for changes. We don’t own this theme manager object because we’re using a singleton, so a simple <code>@ObservedObject</code> is the right choice:</p>
+<pre><code class="language-swift">struct ThemeModifier: ViewModifier {
+    @ObservedObject var themeManager = ThemeManager.shared
+
+    func body(content: Content) -&gt; some View {
+        content.environment(\.theme, themeManager.activeTheme)
+    }
+}</code></pre>
+<p>And <em>now</em> we can wrap it up in a <code>View</code> extension for easier use:</p>
+<pre><code class="language-swift">extension View {
+    func themed() -&gt; some View {
+        modifier(ThemeModifier())
+    }
+}</code></pre>
+<p>With that all done, we can switch <code>ContentView</code> over to using <code>@ObservedObject</code> for its theme manager, so it’s able to read and write data:</p>
+<pre><code class="language-swift">@ObservedObject var theme = ThemeManager.shared</code></pre>
+<p>That means using <code>theme.activeTheme</code> everywhere, because now we want to modify the theme struct directly. Once that’s done, add a <code>themed()</code> modifier to <code>ContentView</code> so the active theme is sent into the environment.</p>
+<p>The interesting part is in <code>CirclesView</code>, where now we can watch the environment key rather than using <code>@EnvironmentObject</code>:</p>
+<pre><code class="language-swift">struct CirclesView: View {
+    @Environment(\.theme) var theme
+
+    var body: some View {
+        print("In CirclesView.body")
+
+        return ForEach(0..&lt;3) { _ in
+            Circle()
+                .stroke(.red, lineWidth: theme.strokeWidth)
+        }
+    }
+}</code></pre>
+<p>You’ll see that still triggers when the stroke width changes or when the font changes, but <em>doesn’t</em> change when the font is changed to its existing value – SwiftUI is smart enough to discard that.</p>
+<p>But we can get even better: because <code>@Environment</code> uses a key path rather than always accepting a whole observable object like <code>@EnvironmentObject</code> does, we can actually tell SwiftUI we want access to only <em>part</em> of the theme, which means only that part of it will be a dependency for this view:</p>
+<pre><code class="language-swift">struct CirclesView: View {
+    @Environment(\.theme.strokeWidth) var strokeWidth
+
+    var body: some View {
+        print("In CirclesView.body")
+
+        return ForEach(0..&lt;3) { _ in
+            Circle()
+                .stroke(.red, lineWidth: strokeWidth)
+        }
+    }
+}</code></pre>
+<p>And now SwiftUI will only reinvoke the <code>body</code> property when that one specific value changes – we’re back to where we were originally in terms of performance, while also benefiting from having the environment object available elsewhere if needed.</p>
+<p>This approach obviously takes more work, but it gives us the ability to synchronize changes everywhere with some kind of theme control panel, but also means we get the guaranteed safety of using environment keys rather than environment objects.</p><h2>Overriding the environment</h2>
+<p>As we’ve seen, SwiftUI’s environment flows down through our views, which allows parents to set some data for their children that can then be read out as needed.</p>
+<!-- VIMEO: 787315395 2:43 -->
+<p>For example, we might create a simple welcome view for our app:</p>
+<pre><code class="language-swift">struct WelcomeView: View {
+    var body: some View {
+        VStack {
+            Image(systemName: "sun.max")
+            Text("Welcome!")
+        }
+    }
+}</code></pre>
+<p>We could then use it somewhere else, adjusting its font as needed:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    var body: some View {
+        WelcomeView()
+            .font(.largeTitle)
+    }
+}</code></pre>
+<p>That works well enough, but what if we wanted to customize the font for the SF Symbols image we’re using? Maybe our designer wants that to be much bolder, so the image stands out more clearly.</p>
+<p><img src="../Assets/transform-environment1.png" alt="A sun icon with the word Welcome below." /></p>
+<p>We <em>could</em> try adding a <code>font()</code> modifier to it, like this:</p>
+<pre><code class="language-swift">Image(systemName: "sun.max")
+    .font(.largeTitle.weight(.black))</code></pre>
+<p>But now we’ve introduce a problem: that font will override whatever comes in from the environment, so if we later changed <code>ContentView</code> to use <code>.font(.headline)</code> instead we’ll have a mismatch – our symbol will use a large title, whereas the text below will use a headline font.</p>
+<p>In this situation, the second <code>font()</code> modifier isn’t really what we meant – we don’t want to force a wholly new font, we just want to bold up whatever font we were asked to use. SwiftUI has a wholly separate modifier for this, called <code>transformEnvironment()</code>: it is able to transform any one specific environment key somehow, and passes us an <code>inout</code> reference of whatever the current value is.</p>
+<p>So, a much better solution is to write this:</p>
+<pre><code class="language-swift">Image(systemName: "sun.max")
+    .transformEnvironment(\.font) { font in
+        font = font?.weight(.black)
+    }</code></pre>
+<p>This approach is really similar to the <code>transaction()</code> modifier: any kind of font applied to this image will automatically be transformed using our custom closure.</p>
+<p><img src="../Assets/transform-environment2.png" alt="The sun icon is now bold, while the text is still its default weight." /></p><h2>Preferences</h2>
+<p>We’ve seen how SwiftUI’s environment flows <em>downwards</em>, but sometimes you want information to flow <em>upwards</em> too – to send data from a child view upwards to its ancestor views.</p>
+<!-- VIMEO: 787315552 8:40 -->
+<p>In SwiftUI this is done using preferences, and the canonical example of this in action is the <code>navigationTitle()</code> modifier:</p>
+<pre><code class="language-swift">NavigationStack {
+    VStack {
+        Image(systemName: "sun.max")
+        Text("Welcome!")
+    }
+    .navigationTitle("MyApp")
+}</code></pre>
+<p>In that code, the <code>VStack</code> describes its navigation title, but that data flows upwards to the <code>NavigationStack</code> containing it. This makes sense from a UI perspective, because of course the navigation stack can push and pop views freely, and it needs to be able to update itself to show the titles of each of those views.</p>
+<p><img src="../Assets/preferences1.png" alt="An iOS device showing a sun icon and Welcome, with the navigation title My App." /></p>
+<p>Just like the environment, preferences flow upwards continuously rather than just stopping at the first container. In our simple <code>ContentView</code> code, this means we can put <code>navigationTitle()</code> on a view <em>inside</em> the <code>VStack</code>, if we wanted:</p>
+<pre><code class="language-swift">NavigationStack {
+    VStack {
+        Image(systemName: "sun.max")
+        Text("Welcome!")
+            .navigationTitle("MyApp")
+    }
+}</code></pre>
+<p>That will give exactly the same result – the title preference just flows upwards until it’s used.</p>
+<p>Of course, that might set off some alarm bells: what happens if we have <em>multiple</em> navigation titles? We can find out easily:</p>
+<pre><code class="language-swift">NavigationStack {
+    VStack {
+        Image(systemName: "sun.max")
+            .navigationTitle("Image")
+
+        Text("Welcome!")
+            .navigationTitle("Text")
+    }
+    .navigationTitle("VStack")
+}</code></pre>
+<p>As you’ll see when that code runs, the navigation view just picks the first one it finds – it will show “Image” as its title.</p>
+<p>This kind of preference system is open to us to use as needed, although you should keep in mind that having data flowing freely both downwards <em>and</em> upwards might result in spaghetti code.</p>
+<p>Our own preferences work in a similar way to <code>navigationTitle()</code>:</p>
+<ul>
+<li>Any view can add them.</li>
+<li>They flow upwards through our views.</li>
+<li>We need to choose one value to use.</li>
+</ul>
+<p>It’s not <em>identical</em>, because we get to decide how the single value is selected – maybe we choose the first one like <code>navigationTitle()</code>, or maybe we combine values together somehow.</p>
+<p>Enough talk: let’s try and implement a preference key ourselves, which will let a child view report its size upwards to containers.</p>
+<p>The first step is to create a new struct that conforms to the <code>PreferenceKey</code> protocol. This requires us to provide a default value for the preference, just like <code>EnvironmentKey</code>, but now we also need to provide a <em>reducer</em> function – code that chooses which value to use, when several come in.</p>
+<p>In our case, we want to track the width of some view, but if we get multiple widths coming in we’ll just track the last one:</p>
+<pre><code class="language-swift">struct WidthPreferenceKey: PreferenceKey {
+    static let defaultValue = 0.0
+
+    static func reduce(value: inout Double, nextValue: () -&gt; Double) {
+        value = nextValue()
+    }
+}</code></pre>
+<p>Now we can make a view that sets a value for that preference, like this:</p>
+<pre><code class="language-swift">struct SizingView: View {
+    @State private var width = 50.0
+
+    var body: some View {
+        Color.red
+            .frame(width: width, height: 100)
+            .onTapGesture {
+                width = Double.random(in: 50...160)
+            }
+            .preference(key: WidthPreferenceKey.self, value: width)
+    }
+}</code></pre>
+<p>That changes its width whenever it’s tapped, which is helpful so you can see what’s happening.</p>
+<p>Finally, we need to place that view somehow, and watch for changes to its preferences. This watching is done using the <code>onPreferenceChange()</code> modifier, which runs code of our choosing whenever some specific preference data changes, like this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var width = 0.0
+
+    var body: some View {
+        NavigationStack {
+            VStack {
+                SizingView()
+            }
+            .onPreferenceChange(WidthPreferenceKey.self) { width = $0 }
+            .navigationTitle("Width: \(width)")
+        }
+    }
+}</code></pre>
+<p>That code works great: you can run the project, then tap the red square to see its width adjust and be reflected in the navigation view.</p>
+<p><img src="../Assets/preferences2.png" alt="A 50x100 red rectangle, with 50.000000 in the navigation title." /></p>
+<p>Of course, rather than just <em>displaying</em> the value, we can put it to use somehow. For example, we could use the value to set the widths of other, unrelated views, like this:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var width = 0.0
+
+    var body: some View {
+        NavigationStack {
+            VStack {
+                SizingView()
+
+                Text("100%")
+                    .frame(width: width)
+                    .background(.red)
+
+                Text("150%")
+                    .frame(width: width * 1.5)
+                    .background(.green)
+
+                Text("200%")
+                    .frame(width: width * 2)
+                    .background(.blue)
+            }
+            .onPreferenceChange(WidthPreferenceKey.self) { width = $0 }
+            .navigationTitle("Width: \(width)")
+        }
+    }
+}</code></pre>
+<p><img src="../Assets/preferences3.png" alt="A red rectangle with three color text boxes below, each having sizes that depend on the rectangle’s size." /></p>
+<p>Or we can add multiple resizing views just fine, thanks to the reducer we wrote:</p>
+<pre><code class="language-swift">VStack {
+    SizingView()
+    SizingView()
+    SizingView()
+}
+.onPreferenceChange(WidthPreferenceKey.self) { width = $0 }
+.navigationTitle("Width: \(width)")</code></pre>
+<p>We made the <code>reduce()</code> method always use the final value it’s given, so when that code runs only the third <code>SizingView</code> will have its width reflected in the navigation title. Of course, it doesn’t have to be that way: we could make our reducer sum the preferences instead, like this:</p>
+<pre><code class="language-swift">static func reduce(value: inout Double, nextValue: () -&gt; Double) {
+    value += nextValue()
+}</code></pre>
+<p>Now the final value for our preference will be the total of all three widths, and will automatically adapt when any of the three changes. </p>
+<p><img src="../Assets/preferences4.png" alt="Three red rectangles of various sizes, with the total of their widths visible in the navigation title." /></p>
+<p>Even better, if you wanted to mimic the “first preference only” approach of <code>navigationTitle()</code>, it takes literally zero code:</p>
+<pre><code class="language-swift">static func reduce(value: inout Double, nextValue: () -&gt; Double) {
+
+}</code></pre>
+<p>Because that never calls <code>nextValue()</code>, it means “you give me the first value and the next one, but I don’t care – do nothing with them.”</p><h2>Anchor preferences</h2>
+<p>You’ve seen how preferences allow us to send data from a child view up to its ancestors, and how it’s up to us to decide what to do – if anything – with that information. Well, SwiftUI provides a handful of specialized preference modifiers that are specifically aimed at making it easier to share sizing data and make use of it easily.</p>
+<!-- VIMEO: 787315947 18:04 -->
+<p>To demonstrate this, we’re going to create a simplified copy of part of the Airbnb app: at the top of the app’s Explore tab there are some options you can select, and whichever one is selected shows a line underneath. Sure, we could do this by giving every icon an underline that gets shown or hidden depending on the selection status, but the Airbnb app uses just one line that moves around and resizes based on the category selection.</p>
+<p><img src="../Assets/airbnb.png" alt="The Airbnb app, showing buttons for Luxe, Windmills, and Treehouses. Luxe is underlined." /></p>
+<p>Solving this problem will demonstrate not only how the more advanced preferences work, but you’ll also see how preference data can be more complex – it’s definitely a fun problem to tackle.</p>
+<p>First, we can define what one category in our app looks like. We’ll provide two properties here: one for the identifier, which will be things like “Beach”, “Golfing”, or “Tropical”, and one for the SF Symbol that will be used to add an icon. We’ll make this struct be <code>Identifiable</code> so we can loop over arrays of them in SwiftUI, and also <code>Equatable</code> so we can compare one category to another. Start with this code:</p>
+<pre><code class="language-swift">struct Category: Identifiable, Equatable {
+    let id: String
+    let symbol: String
+}</code></pre>
+<p>Next will be the preference data we want to share. Previously this was a simple number, but this time I want to share a custom struct containing two pieces of information: the category that it refers to, and an <em>anchor</em>. Anchors are opaque geometry stores, which means they can store a reference to some position and size on the screen but we can’t read it out directly because it wouldn’t be useful. Fortunately, SwiftUI knows how to read them for us, and in doing so automatically resolves the anchor’s geometry into coordinates that are useful for us.</p>
+<p>If that sounds fuzzy, relax; it will make sense in a moment. For now, add this second struct to store the category and an anchor storing its geometry data:</p>
+<pre><code class="language-swift">struct CategoryPreference: Equatable {
+    let category: Category
+    let anchor: Anchor&lt;CGRect&gt;
+}</code></pre>
+<p>Next we’re going to add a third struct that conforms to <code>PreferenceKey</code>. This is similar to the preference key we wrote for <code>SizingView</code>, except now we’re going to send back an array of data all at once – we’ll collect whatever array of <code>CategoryPreference</code> values we’re given and add them into a collection of <em>all</em> such values</p>
+<pre><code class="language-swift">struct CategoryPreferenceKey: PreferenceKey {
+    static let defaultValue = [CategoryPreference]()
+
+    static func reduce(value: inout [CategoryPreference], nextValue: () -&gt; [CategoryPreference]) {
+        value.append(contentsOf: nextValue())
+    }
+}</code></pre>
+<p>That completes all the underlying data we need for our work, so now we need two SwiftUI views to render it all: one to handle a single category button on the screen, and one to render all the buttons plus an underline and whatever else we want.</p>
+<p>First, the category button. This will be given the category to show, along with a binding that will store which category is currently selected. This binding is important, as it allows our category button to adjust external state – to say “my category was selected” when it is tapped.</p>
+<p>It looks like this:</p>
+<pre><code class="language-swift">struct CategoryButton: View {
+    var category: Category
+    @Binding var selection: Category?
+
+    var body: some View {
+        Button {
+            withAnimation {
+                selection = category
+            }
+        } label: {
+            VStack {
+                Image(systemName: category.symbol)
+                Text(category.id)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement()
+        .accessibilityLabel(category.id)
+    }
+}</code></pre>
+<p>We’ll come back to that in a moment, but first I want to create an initial version of <code>ContentView</code>, which has the job of showing several category buttons in a <code>HStack</code>. We’ll add more to this shortly, so I’ll also add a <code>VStack</code> where we can add extra things later, but the important part for now is that it has an array of categories and a single piece of state that stores the selected category – that’s what gets passed into <code>CategoryButton</code> as a binding.</p>
+<p>Add this <code>ContentView</code> code now:</p>
+<pre><code class="language-swift">struct ContentView: View {
+    @State private var selectedCategory: Category?
+
+    let categories = [
+        Category(id: "Arctic", symbol: "snowflake"),
+        Category(id: "Beach", symbol: "beach.umbrella"),
+        Category(id: "Shared Homes", symbol: "house")
+    ]
+
+    var body: some View {
+        VStack {
+            HStack(spacing: 20) {
+                ForEach(categories) { category in
+                    CategoryButton(category: category, selection: $selectedCategory)
+                }
+            }
+        }
+    }
+}</code></pre>
+<p>At this point we have something fairly unimpressive: we’ve created the data model for our preferences, and also the views to show categories, but we haven’t actually linked them together. To do this means introducing two new modifiers: one to send the value upwards as a preference, and one to read the array of those values back out once they have been through our reducer function.</p>
+<p>Now, previously we used the <code>preference()</code> modifier for sending a preference up to ancestors, but here we’re going to use a specialized preference specifically for working with geometry. This modifier is called <code>anchorPreference()</code> and takes three parameters:</p>
+<ol>
+<li>The preference key you want to send. For us that will be <code>CategoryPreferenceKey.self</code>, just like we’d have with a simple preference.</li>
+<li>What part of the geometry we want to send. Perhaps you might want to send just the leading edge, for example, but here we’re going to request <code>.bounds</code> to get the whole frame wrapped up.</li>
+<li>A transformation function that accepts an <code>Anchor</code> containing our bounds, and needs to convert that into whatever input your preference key expects. If you remember, we made ours work with <code>CategoryPreference</code> arrays, so we’ll convert the anchor into an array containing one <code>CategoryPreference</code> instance.</li>
+</ol>
+<p>All this is done by adding this single modifier to <code>CategoryButton</code>, below <code>accessibilityLabel()</code>:</p>
+<pre><code class="language-swift">.anchorPreference(key: CategoryPreferenceKey.self, value: .bounds, transform: { [CategoryPreference(category: category, anchor: $0)] })</code></pre>
+<p>So, we’re telling SwiftUI we want to express an anchor preference for the <code>CategoryPreferenceKey</code>, that it needs to use the bounds of the button we attached the preference to, and we want to receive that bounds as an anchor and place it inside a <code>CategoryPreference</code> object.</p>
+<p>That sets the category preference key for each button, but we still need to add code to <em>read</em> the preference and act on it. This is where the second new modifier comes in: rather than just using <code>onPreferenceChange()</code> to read values coming in, we’re going to use <code>overlayPreferenceValue()</code>. This has the job of reading preferences and converting them into an overlay – it’s effectively a combination of <code>onPreferenceChange()</code> and <code>overlay()</code> in one modifier, which helps make our code simpler.</p>
+<p>This is where SwiftUI performs a beautiful trick. Remember earlier when I said that anchors are opaque geometry stores? That means they contain geometry data, but don’t let us read that data back out because it wouldn’t have any meaning – just knowing X:35 Y:58 by itself doesn’t mean anything unless you know exactly what coordinate space you’re coming from and going to, for example.</p>
+<p>SwiftUI solves this brilliantly using <code>GeometryReader</code>: if we use one of these anywhere in our view layout, we can pass an anchor to its proxy object and have it send back a relevant frame for us as a <code>CGRect</code>. That means the <code>GeometryProxy</code> figures out how to convert the original frame into whatever coordinate space our <code>GeometryProxy</code> is working in – it takes away all the hassle of figuring out where the two are in relation to each other, and just sends us back the bit we actually care about: a <code>CGRect</code> telling us the frame we actually want to use to refer to the original bounds we set with <code>anchorPreference()</code>.</p>
+<p>Enough chat, let’s put the code in place so you can see exactly how it works. Please add this modifier to the <code>VStack</code> in <code>ContentView</code>:</p>
+<pre><code class="language-swift">.overlayPreferenceValue(CategoryPreferenceKey.self) { preferences in
+    GeometryReader { proxy in
+        if let selected = preferences.first(where: { $0.category == selectedCategory }) {
+            let frame = proxy[selected.anchor]
+
+            Rectangle()
+                .fill(.primary)
+                .frame(width: frame.width, height: 2)
+                .position(x: frame.midX, y: frame.maxY)
+        }
+    }
+}</code></pre>
+<p>I’m going to break that down and walk through every line, but first I want you to build and run the code so you can see what it does – you should find you can now tap on any button to see a line animate between them, automatically moving and resizing so that it always underlines each button correctly. It’s a great effect, although I should repeat that it’s from Airbnb rather than something I came up with by myself!</p>
+<p>Anyway, let’s break down the code:</p>
+<ol>
+<li>We use <code>overlayPreferenceValue()</code> to specify we want to read in a particular preference key and convert it into an overlay. As a reminder, that means we want SwiftUI to place some kind of view over our <code>VStack</code>, and we’ll use the preference keys to figure out what that view should be.</li>
+<li>Inside our overlay we use a <code>GeometryReader</code> so we can evaluate our geometry somehow. This will automatically expand to fill all the available space, which is fine as an overlay because it will naturally fit the same space as the view it overlays.</li>
+<li>We look through all the category preferences for whichever one matches the selected category.</li>
+<li>If we find a match, we pass the selected preference’s anchor into our geometry proxy, which performs the conversion into a finished frame representing where that anchor is in the coordinates of our current <code>GeometryReader</code>.</li>
+<li>Now we have a real frame, we draw a rectangle using the width of the frame so it matches the width of the thing we want to underline, giving it a 2-point height so it looks like a thick line.</li>
+<li>We want to position that rectangle so that its center lies at the middle bottom of our frame. If you prefer <code>offset()</code> rather than <code>position()</code> you should use <code>frame.minX</code> because we’re providing a relative movement rather than trying to center the view in some exact location.</li>
+</ol>
+<p>The real magic in that code is <code>proxy[selected.anchor]</code>, which takes care of all the geometry conversion for us – hopefully you can see now why <code>Anchor</code> is opaque!</p>
+<p><img src="../Assets/anchor-preferences1.png" alt="Three category buttons, with Shared Homes being underlined." /></p>
+<p>The real power of this approach is that the rest of our UI has no idea that preferences are being used at all, which means if we added more to the <code>VStack</code> it would Just Work™ without any special extra work from us.</p>
+<p>For example, we could add a <code>List</code> below the buttons <code>HStack</code>, showing all the categories and letting the user select them that way:</p>
+<pre><code class="language-swift">List(categories, id: \.id) { category in
+    HStack {
+        Button(category.id) {
+            withAnimation {
+                selectedCategory = category
+            }
+        }
+
+        if selectedCategory == category {
+            Spacer()
+
+            Image(systemName: "checkmark")
+        }
+    }
+}</code></pre>
+<p>That adjusts <code>selectedCategory</code> when each row in the list is tapped, which triggers <code>body</code> being reinvoked and will update the overlay preference. If you try it out, you’ll see SwiftUI automatically moves the underline rectangle around, just like we had when tapping the buttons directly.</p>
+<p>We can also show the selected category by adding another view to the <code>VStack</code>, below the <code>List</code>:</p>
+<pre><code class="language-swift">if let selectedCategory {
+    Text("Selected: \(selectedCategory.id)")
+}</code></pre>
+<p>Again, that will automatically update no matter how the selected category changes – we get both the underline and text updating smoothly, all thanks to SwiftUI’s preferences system.</p>
+<p><img src="../Assets/anchor-preferences2.png" alt="A list of categories that match buttons above them. Beach is underlined, and also checked in the list." /></p>
+<p>So, even though I think it takes a little understanding at first, I hope you can appreciate the power being exposed here: we’re able to send complex data to parent views, convert coordinate spaces, and more, all to quite elegantly achieve a very specific result.</p>		</div>
+
+		<p style="text-align: center;"><a href="../index.html">Back to Table of Contents</a></p>
+
+		<p style="text-align: center; margin-top: 40px;">Copyright &copy; 2023 Paul Hudson, <a href="http://www.hackingwithswift.com">hackingwithswift.com</a>.<br /> <a href="http://twitter.com/twostraws">You should follow me on Twitter</a>.</p>
+	</body>
+
+	<script src="../Assets/prism.js"></script>
+</html>

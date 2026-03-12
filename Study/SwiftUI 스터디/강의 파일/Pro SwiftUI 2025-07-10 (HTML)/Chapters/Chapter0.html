@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Preface - Pro SwiftUI</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<link rel="stylesheet" href="../Assets/project.css">
+		<link rel="stylesheet" href="../Assets/prism.css">
+	</head>
+
+	<body>
+		<p style="text-align: center;"><img id="logo" src="../Assets/logo.png" alt="Pro SwiftUI" width="560" /></p>
+
+		<div id="container">
+<h1>Preface</h1><h2>Welcome</h2>
+<p>SwiftUI makes it astonishingly easy to create beautiful, fast, <em>native</em> apps for all of Apple’s platforms, and I don’t think I’ll ever grow tired of watching folks be amazed at how fast we can put apps together.</p>
+<p>However, once you’re past the basics it’s common to find some parts of SwiftUI <em>confusing</em> – you try some code out and wonder why it doesn’t behave the way you expect, and it’s easy to fall into the trap of experimenting with various modifiers and workarounds until you get exactly the result you want. </p>
+<p>Although I can’t solve <em>all</em> your problems with SwiftUI, the core goal of this book is to help you build a better understanding of what SwiftUI is doing behind the scenes – to really understand what it’s doing and why, and in understanding that learn to write better code. So, rather than just show you a huge range of different APIs that are on offer, we will instead be focusing on the real core fundamentals of SwiftUI so you can see exactly what makes it tick.</p>
+<p>We’ll accomplish this partly by looking at the small amounts of the source code for SwiftUI that gets exposed by Swift’s interface file, but also by writing a whole bunch of code ourselves so you can see exactly how SwiftUI responds to various scenarios. </p>
+<p>If you work your way through the whole book, including trying all the sample code, you should come away with a much deeper understanding of what SwiftUI is doing when it runs our code.</p>
+<p>Of course, a book full of behind the scenes explanations wouldn’t be much fun, so I’ve tried to include a variety of more graphical techniques too – I feel confident everyone will learn something while following along!</p>
+<h2>Working with SwiftUI’s public interface</h2>
+<p>At various points in this book I will ask you to run a specific command. It’s quite long, so I’ve made a GitHub gist from it at this link: <a href="https://bit.ly/swiftinterface">https://bit.ly/swiftinterface</a></p>
+<p>In case that link doesn’t work, here’s the command in full:</p>
+<p><strong>xed /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/SwiftUI.framework/Modules/SwiftUI.swiftmodule/x86_64-apple-ios-simulator.swiftinterface</strong></p>
+<p>If that command works immediately, great – you should see Xcode open with an editing window full of code! But don’t worry if you get an error, because I’ll address that in a moment.</p>
+<p>The command above asks Xcode to open SwiftUI’s public interface file for reading. That’s not the same as the generated interface Xcode generates for us using Open Quickly or Jump to Definition, but is instead the public API interface file SwiftUI actually ships with.</p>
+<p>These two files have many things in common, but the public API interface file provides a great deal more detail, and, critically for us, also includes small amounts of Swift code that implement various SwiftUI features. This is required for performance reasons, because some parts of SwiftUI are so trivial or so commonplace that Swift literally copies Apple’s own SwiftUI code into our files at build time as part of a process called <em>inlining</em>. </p>
+<p>The reason I’m saying this up front is two-fold: so I don’t need to keep explaining that this public interface file provides useful snippets of Apple’s own source code that show us how a feature is implemented, but also because you <em>might</em> get an error when running it.</p>
+<p>So, if you see an error like this one: “xcode-select: error: tool 'xed' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools' is a command line tools instance”, it means your Mac has a small misconfiguration that is easily corrected. Run this command to fix the problem: <strong>sudo xcode-select -s /Applications/Xcode.app</strong>. That will prompt you for your password, but once that’s done you’ll be able to run the original command without problem.</p>
+<p>Anyway, you’re welcome to close the file for now; I’ll let you know when I want to dig into it.</p>
+<!-- START FREQUENT FLYER -->
+<h2>Frequent Flyer Club</h2>
+<p>You can buy Swift tutorials from anywhere, but I'm pleased, proud, and very grateful that you chose mine. I want to say thank you, and the best way I have of doing that is by giving you bonus content above and beyond what you paid for – you deserve it!</p>
+<p>Every book contains a word that unlocks bonus content for Frequent Flyer Club members. The word for this book is <strong>HARMONY</strong>. Enter that word, along with words from any other Hacking with Swift books, here: <a href="https://www.hackingwithswift.com/frequent-flyer">https://www.hackingwithswift.com/frequent-flyer</a></p>
+<!-- END FREQUENT FLYER -->
+<h2>Updates</h2>
+<p>When you buy your books from Hacking with Swift, you get Swift updates for free. You can read the full version of my update policy at <a href="https://www.hackingwithswift.com/update-policy">https://www.hackingwithswift.com/update-policy</a>, but the abridged version is this: whenever I release to the public an updated book or video to reflect these changes, all existing buyers will get that update free.</p>
+<p>This edition has the version 2025-07-10.</p>
+<h2>Dedication</h2>
+<p>This book is dedicated to my father, who died earlier this year. After he passed I looked through photos I had taken of him, and realized although I had a great many of him with my children I had very few of him with me. So, if you’re reading this and are lucky enough to have your parents or even grandparents around, go and make some memories with them!</p>		</div>
+
+		<p style="text-align: center;"><a href="../index.html">Back to Table of Contents</a></p>
+
+		<p style="text-align: center; margin-top: 40px;">Copyright &copy; 2023 Paul Hudson, <a href="http://www.hackingwithswift.com">hackingwithswift.com</a>.<br /> <a href="http://twitter.com/twostraws">You should follow me on Twitter</a>.</p>
+	</body>
+
+	<script src="../Assets/prism.js"></script>
+</html>
