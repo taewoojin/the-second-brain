@@ -1,4 +1,3 @@
-# Git Submodule 튜토리얼
 
 ## 1. Submodule이란?
 
@@ -11,12 +10,12 @@ Git submodule은 **하나의 Git 저장소 안에 다른 Git 저장소를 포함
 
 ### 일반 폴더와의 차이점
 
-| 구분 | 일반 폴더 | Submodule |
-|------|-----------|-----------|
-| 커밋 히스토리 | 부모 레포에 포함 | 독립적으로 관리 |
-| 원격 저장소 | 부모 레포와 동일 | 별도의 원격 저장소를 가짐 |
-| 접근 권한 | 부모 레포와 동일 | 각 저장소별 별도 설정 가능 |
-| 부모 레포가 저장하는 것 | 파일 내용 전체 | 특정 커밋의 참조(해시값)만 저장 |
+| 구분            | 일반 폴더     | Submodule          |
+| ------------- | --------- | ------------------ |
+| 커밋 히스토리       | 부모 레포에 포함 | 독립적으로 관리           |
+| 원격 저장소        | 부모 레포와 동일 | 별도의 원격 저장소를 가짐     |
+| 접근 권한         | 부모 레포와 동일 | 각 저장소별 별도 설정 가능    |
+| 부모 레포가 저장하는 것 | 파일 내용 전체  | 특정 커밋의 참조(해시값)만 저장 |
 
 핵심은 마지막 줄이다. 부모 레포는 submodule의 파일 내용을 직접 저장하지 않고, **"이 submodule은 현재 어떤 커밋을 가리키고 있는가"**라는 정보만 기록한다.
 
@@ -50,7 +49,49 @@ git version 2.39.5
 | `the-second-brain` | 공개 | 부모 레포 (submodule을 포함하는 쪽) |
 | `the-sanctum` | 비공개 | 자식 레포 (submodule로 추가될 쪽) |
 
-GitHub에서 두 저장소를 미리 생성해 둔다. `the-sanctum`에는 아무 파일이나 하나 이상 커밋되어 있어야 한다.
+GitHub 웹사이트에서 직접 생성하거나, `gh` CLI를 사용하여 터미널에서 생성할 수 있다.
+
+#### gh CLI로 레포 생성하기
+
+`gh`(GitHub CLI)가 설치되어 있다면 다음 명령어로 레포를 생성할 수 있다.
+
+```bash
+# gh 설치 확인
+gh --version
+```
+
+```
+gh version 2.65.0 (2025-01-20)
+```
+
+설치되어 있지 않다면 `brew install gh`(macOS) 또는 [cli.github.com](https://cli.github.com)에서 설치한다.
+
+```bash
+# 공개 레포 생성 (현재 디렉토리를 레포로 연결)
+gh repo create the-second-brain --public --source . --push
+
+# 비공개 레포 생성 후 바로 클론
+gh repo create the-sanctum --private --clone
+```
+
+**`the-sanctum` 생성 예상 출력:**
+
+```
+✓ Created repository <사용자명>/the-sanctum on GitHub
+  https://github.com/<사용자명>/the-sanctum
+Cloning into 'the-sanctum'...
+```
+
+`the-sanctum`에는 아무 파일이나 하나 이상 커밋되어 있어야 한다. 빈 레포를 생성했다면 초기 커밋을 만들어 둔다.
+
+```bash
+cd the-sanctum
+echo "# The Sanctum" > README.md
+git add README.md
+git commit -m "Initial commit"
+git push -u origin main
+cd ..
+```
 
 ---
 
