@@ -1,0 +1,3 @@
+[submodule "the-sanctum"]
+	path = the-sanctum
+	url = https://github.com/taewoojin/the-sanctum.git
