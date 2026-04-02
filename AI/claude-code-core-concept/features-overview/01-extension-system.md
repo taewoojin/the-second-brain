@@ -1,6 +1,6 @@
 # 확장 시스템 소개
 
-> **TL;DR**
+> **한눈에 보기**
 > Claude Code는 여러 확장 기능을 제공한다: 항상 작동하는 CLAUDE.md와 Rules, 필요할 때 쓰는 Skills·Subagents·Agent Teams, 외부 서비스를 연결하는 MCP, 이벤트에 반응하는 Hooks. 이것들을 묶어 배포하는 단위가 Plugins다.
 
 ## 확장 기능은 왜 필요한가
