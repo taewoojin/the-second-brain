@@ -1,6 +1,7 @@
-# Claude Code의 메모리 시스템
 
 > https://code.claude.com/docs/en/memory
+
+# Claude Code 메모리 시스템
 
 # 목표
 
