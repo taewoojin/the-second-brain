@@ -1,3 +1,6 @@
+
+> https://code.claude.com/docs/en/how-claude-code-works
+
 # Claude Code의 작동 원리
 
 Claude Code가 어떻게 작업을 수행하는지 — 에이전틱 루프, 도구, 세션, 안전장치까지 — 를 다루는 문서.

@@ -1,3 +1,6 @@
+
+> https://code.claude.com/docs/en/features-overview
+
 # Claude Code 확장 기능 가이드
 
 Claude Code의 기본 도구(파일 편집, 검색, 실행, 웹 접근)만으로도 대부분의 코딩 작업을 처리할 수 있다. 이 가이드는 그 위에 올리는 **확장 계층** — Claude가 아는 것을 커스터마이징하고, 외부 서비스에 연결하고, 워크플로를 자동화하는 기능들을 다룬다.
