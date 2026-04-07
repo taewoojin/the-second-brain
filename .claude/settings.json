@@ -23,4 +23,42 @@
             }
         ]
     }
+  "permissions": {
+    "allow": [
+      "Bash(find *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(grep *)",
+      "Bash(mkdir *)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(xcodebuild *)",
+      "Bash(xcrun *)",
+      "Bash(gh auth status)",
+      "Bash(gh pr view *)",
+      "Bash(gh issue view *)",
+      "Read",
+      "Glob",
+      "Grep",
+      "WebFetch"
+    ],
+    "ask": [
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(gh pr create *)",
+      "Bash(gh issue create *)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(rm -r *)",
+      "Bash(git push --force *)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean -f *)",
+      "Bash(git commit --amend *)"
+    ]
+  },
+  "attribution": { "commit": "", "pr": "" },
 }
