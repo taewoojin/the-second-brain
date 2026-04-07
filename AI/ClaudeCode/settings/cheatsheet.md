@@ -44,14 +44,14 @@
 
 ## 환경/개발
 
-| 키                   | 한 줄 설명                | 예시                                                   |
-| :------------------ | :-------------------- | :--------------------------------------------------- |
-| `env`                  | 매 세션 환경변수 주입                               | `{"ANTHROPIC_MODEL": "claude-opus-4-6"}`             |
-| `hooks`                | 라이프사이클 훅 설정                               | [hooks 문서](https://code.claude.com/docs/en/hooks) 참고 |
-| `allowedHttpHookUrls`  | HTTP hook이 요청 가능한 URL 패턴 허용 목록           | `["https://hooks.example.com/*"]`                    |
-| `autoMemoryDirectory`  | auto memory 저장 디렉토리 커스텀 (project settings 불가) | `"~/my-memory-dir"`                                  |
-| `plansDirectory`       | plan 파일 저장 경로                               | `"./plans"`                                          |
-| `cleanupPeriodDays`    | 비활성 세션 보관 기간 (기본 30일)                    | `20`                                                 |
+| 키                     | 한 줄 설명                                        | 예시                                                   |
+| :-------------------- | :-------------------------------------------- | :--------------------------------------------------- |
+| `env`                 | 매 세션 환경변수 주입                                  | `{"ANTHROPIC_MODEL": "claude-opus-4-6"}`             |
+| `hooks`               | 라이프사이클 훅 설정                                   | [hooks 문서](https://code.claude.com/docs/en/hooks) 참고 |
+| `allowedHttpHookUrls` | HTTP hook이 요청 가능한 URL 패턴 허용 목록                | `["https://hooks.example.com/*"]`                    |
+| `autoMemoryDirectory` | auto memory 저장 디렉토리 커스텀 (project settings 불가) | `"~/my-memory-dir"`                                  |
+| `plansDirectory`      | plan 파일 저장 경로                                 | `"./plans"`                                          |
+| `cleanupPeriodDays`   | 비활성 세션 보관 기간 (기본 30일)                         | `20`                                                 |
 
 ## MCP 서버
 
@@ -128,6 +128,7 @@
       "Bash(git commit --amend *)"
     ]
   },
+  "plansDirectory": "docs/plans",
   "attribution": { "commit": "", "pr": "" }
 }
 ```

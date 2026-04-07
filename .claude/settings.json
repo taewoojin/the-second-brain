@@ -43,7 +43,8 @@
       "Read",
       "Glob",
       "Grep",
-      "WebFetch"
+      "WebFetch",
+      "WebSearch"
     ],
     "ask": [
       "Bash(git commit *)",
