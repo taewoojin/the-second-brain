@@ -3,8 +3,6 @@
 > **한눈에 보기**
 > "항상 알아야 하는 것"은 CLAUDE.md, "가끔 필요한 지식이나 워크플로"는 Skills, "외부 연결"은 MCP, "컨텍스트 격리"는 Subagents, "팀 협업"은 Agent Teams, "자동 실행"은 Hooks. 패키징은 Plugins.
 
-확장 기능들은 역할이 명확히 다르지만, 처음 접하면 비슷해 보이는 조합이 있다. 이 문서는 헷갈리기 쉬운 기능 쌍을 비교하고, 상황별 선택 기준을 제시한다.
-
 ---
 
 ## Skill vs Subagent
@@ -42,7 +40,7 @@
 - "Claude가 항상 알아야 한다" → CLAUDE.md
 - "가끔 참고하거나, 특정 명령으로 실행한다" → Skill
 
-**경험 법칙:** CLAUDE.md가 200줄을 넘으면 참고 자료는 Skills로, 경로별 규칙은 `.claude/rules/`로 분리한다.
+CLAUDE.md가 200줄을 넘으면 참고 자료는 Skills로, 경로별 규칙은 `.claude/rules/`로 분리한다.
 
 ---
 
