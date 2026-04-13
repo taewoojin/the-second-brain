@@ -2,6 +2,7 @@
 name: obsidian-ingest
 description: raw/에 추가된 자료를 wiki/에 수집·정리하는 스킬. 새 자료마다 실행.
 context: fork
+disable-model-invocation: true
 ---
 
 # obsidian-ingest

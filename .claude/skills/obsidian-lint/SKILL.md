@@ -2,6 +2,7 @@
 name: obsidian-lint
 description: 위키 일관성 검사. 깨진 링크, 누락 필드, 고아 페이지, 내용 모순을 탐지하고 리포트 출력.
 context: fork
+disable-model-invocation: true
 ---
 
 # obsidian-lint

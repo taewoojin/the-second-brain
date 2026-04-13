@@ -3,6 +3,7 @@ name: obsidian-query
 description: 위키를 참조하여 질문에 답변하는 스킬. 예: /obsidian-query quantization이란?
 context: fork
 argument-hint: "<질문 내용>"
+disable-model-invocation: true
 ---
 
 # obsidian-query
