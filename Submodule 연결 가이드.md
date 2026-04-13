@@ -60,10 +60,10 @@ PUBLIC
 
 ## 3. the-sanctum 비공개 레포 생성
 
-비공개로 유지할 콘텐츠를 담을 레포를 생성한다.
+비공개로 유지할 콘텐츠를 담을 레포를 생성한다. `--add-readme` 플래그로 초기 커밋을 함께 생성해야 빈 레포 문제 없이 submodule 추가가 가능하다.
 
 ```bash
-gh repo create taewoojin/the-sanctum --private --description "Private vault for the-second-brain"
+gh repo create taewoojin/the-sanctum --private --add-readme --description "Private vault for the-second-brain"
 ```
 
 **예상 출력:**
@@ -89,48 +89,11 @@ git submodule add git@github.com:taewoojin/the-sanctum.git the-sanctum
 **예상 출력:**
 ```
 Cloning into '/Users/taewoo/dev/the-second-brain/the-sanctum'...
-warning: You appear to have cloned an empty repository.
-```
-
-> **참고:** 새로 만든 빈 레포이므로 `empty repository` 경고가 나오는 것은 정상이다.
-
----
-
-## 5. submodule 안에서 파일 생성 & 커밋 & 푸시
-
-submodule 디렉토리로 이동하여 초기 파일을 생성하고 푸시한다.
-
-```bash
-cd ~/dev/the-second-brain/the-sanctum
-```
-
-```bash
-# 초기 README 생성
-echo "# the-sanctum\n\nPrivate vault for the-second-brain." > README.md
-```
-
-```bash
-# 커밋 & 푸시
-git add README.md
-git commit -m "Initial commit"
-git branch -M main
-git push -u origin main
-```
-
-**예상 출력:**
-```
-[main (root-commit) abc1234] Initial commit
- 1 file changed, 3 insertions(+)
- create mode 100644 README.md
-...
-To github.com:taewoojin/the-sanctum.git
- * [new branch]      main -> main
-branch 'main' set up to track 'origin/main'.
 ```
 
 ---
 
-## 6. 부모 레포에서 submodule 참조 커밋 & 푸시
+## 5. 부모 레포에서 submodule 참조 커밋 & 푸시
 
 부모 레포(the-second-brain)로 돌아와서 submodule 참조를 커밋한다.
 
@@ -159,7 +122,7 @@ To github.com:taewoojin/the-second-brain.git
 
 ---
 
-## 7. 검증
+## 6. 검증
 
 ### submodule 상태 확인
 
