@@ -1,16 +1,5 @@
 {
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/block-rm.sh"
-          }
-        ]
-      }
-    ],
     "Notification": [
       {
         "matcher": "",
@@ -22,6 +11,9 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "claude-hud@claude-hud": true
   },
   "permissions": {
     "allow": [
