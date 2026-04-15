@@ -1,19 +1,7 @@
 {
-  "hooks": {
-    "Notification": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "osascript -e 'display notification \"당신의 관심이 필요합니다\" with title \"Claude Code\"'"
-          }
-        ]
-      }
-    ]
-  },
-  "enabledPlugins": {
-    "claude-hud@claude-hud": true
+  "attribution": {
+    "commit": "",
+    "pr": ""
   },
   "permissions": {
     "allow": [
@@ -38,12 +26,6 @@
       "WebFetch",
       "WebSearch"
     ],
-    "ask": [
-      "Bash(git commit *)",
-      "Bash(git push *)",
-      "Bash(gh pr create *)",
-      "Bash(gh issue create *)"
-    ],
     "deny": [
       "Bash(rm -rf *)",
       "Bash(rm -r *)",
@@ -51,12 +33,30 @@
       "Bash(git reset --hard *)",
       "Bash(git clean -f *)",
       "Bash(git commit --amend *)"
+    ],
+    "ask": [
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(gh pr create *)",
+      "Bash(gh issue create *)"
     ]
   },
-  "plansDirectory": "docs/plans",
-  "attribution": { "commit": "", "pr": "" },
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"당신의 관심이 필요합니다\" with title \"Claude Code\"'"
+          }
+        ]
+      }
+    ]
+  },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true
-  }
+  },
+  "plansDirectory": "docs/plans"
 }
