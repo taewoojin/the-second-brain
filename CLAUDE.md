@@ -15,6 +15,7 @@
 | `wiki/articles/` | 아티클/포스팅 정리 | 1파일 = 1아티클 |
 | `wiki/projects/` | 오픈 소스 프로젝트 분석 | 1파일 = 1프로젝트 |
 | `wiki/ai/` | AI 관련 지식 (Claude, LLM 등) | articles와 중복 시 ai/ 우선 |
+| `wiki/ai/claude-code/` | Claude Code 특화 문서 | claude-code/ 서브폴더 사용 |
 | `wiki/concepts/` | 아티클/프로젝트에서 추출한 핵심 개념 | 여러 페이지에서 교차참조되는 개념 |
 | `wiki/index.md` | 전체 페이지 목록 | 페이지 추가/삭제 시 항상 갱신 |
 | `wiki/log.md` | append-only 작업 로그 | **수정 금지.** 추가만. |
