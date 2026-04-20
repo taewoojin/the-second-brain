@@ -1,12 +1,8 @@
 # Wiki Index
 _마지막 업데이트: 2026-04-16_
 
-## Articles (1)
-- [[wiki/articles/에이전트-우선-개발-하네스엔지니어링-Codex]] — OpenAI 하네스 팀이 수동 코드 0줄로 Codex만으로 제품을 구축한 에이전트 우선 개발 사례
-
-## Projects (0)
-
-## AI (11)
+## AI (12)
+- [[wiki/ai/에이전트-우선-개발-하네스엔지니어링-Codex]] — OpenAI 하네스 팀이 수동 코드 0줄로 Codex만으로 제품을 구축한 에이전트 우선 개발 사례
 - [[wiki/ai/MCP-claude-code-연결]] — Model Context Protocol로 Claude Code를 외부 도구/DB/API에 연결하는 방법
 
 ### AI / Claude Code (10)
