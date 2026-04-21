@@ -25,3 +25,10 @@
 기존 claude-code-메모리-CLAUDE-md 업데이트: CLAUDE_CODE_NEW_INIT=1, CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD, InstructionsLoaded hook 디버깅, HTML 블록 주석 자동 제거, MEMORY.md 200줄 제한 vs CLAUDE.md 전체 로드 명확화
 ## [2026-04-21] ingest | claude-code-custom-subagent.md
 신규 페이지 생성: wiki/ai/claude-code/claude-code-서브에이전트-구성.md — frontmatter 전체 필드, 모델 해결 우선순위, 도구 제어, 권한 모드, hooks, persistent memory, MCP 범위 지정, 호출 패턴
+
+## [2026-04-21] ingest | claude code CLI 참조.md
+기존 claude-code-명령어-레퍼런스.md 업데이트: CLI 서브커맨드 전체 목록, CLI 플래그 전체 목록(세션·권한·모델·출력·시스템프롬프트·환경 카테고리) 추가
+## [2026-04-21] ingest | claude code Hooks 참조.md
+기존 claude-code-hooks-자동화가이드.md 업데이트: 전체 hook 이벤트 레퍼런스(25개), 이벤트별 종료코드 2 동작, JSON 결정 제어 패턴, defer 패턴, HTTP hook 응답 처리, CLAUDE_ENV_FILE, skill frontmatter hook 정의 추가
+## [2026-04-21] ingest | MCP를 통해 Claude Code를 도구에 연결하기.md
+신규 페이지 생성: wiki/ai/claude-code/claude-code-MCP-연동.md — HTTP/SSE/stdio 설치, local/project/user 범위, .mcp.json 환경변수 확장, OAuth 인증, 동적 헤더 인증, Tool Search, 채널, 출력 제한, Claude Code를 MCP 서버로 사용
