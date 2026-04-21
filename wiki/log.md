@@ -16,3 +16,7 @@
 ## [2026-04-21] ingest | claude code 권한 모드 선택.md
 ## [2026-04-21] ingest | claude code 명령어.md
 ## [2026-04-21] ingest | claude-code-automate-with-hooks.md
+
+## [2026-04-21] ingest | claude-code-directory-guide.md
+## [2026-04-21] ingest | claude code 환경 변수.md
+## [2026-04-21] ingest | claude code의 작동 방식.md

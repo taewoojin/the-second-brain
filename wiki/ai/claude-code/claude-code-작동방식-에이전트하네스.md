@@ -1,6 +1,6 @@
 # Claude Code 작동 방식: 에이전트 하네스와 내장 도구
 
-**출처**: `raw/claude code의 작동 방식.md`
+**출처**: `raw/claude code의 작동 방식.md` | https://code.claude.com/docs/ko/how-claude-code-works
 **날짜**: 2026-04-20
 **keywords**: agentic loop, 에이전트 하네스, context window, 세션 관리, checkpoint, 권한 모드, git worktrees
 
@@ -86,7 +86,7 @@ claude --continue --fork-session
 ```
 
 - 재개 시 대화 기록은 복원되지만 **세션 범위 권한은 복원되지 않음** (다시 승인 필요)
-- 여러 터미널에서 동일 세션 재개 시 메시지가 인터리브됨 → 병렬 작업에는 `--fork-session` 사용
+- **여러 터미널에서 동일 세션 재개 시**: 두 터미널의 메시지가 같은 파일에 인터리브됨. 아무것도 손상되지 않지만 대화가 뒤섞임. 나중에 해당 세션을 재개하면 모든 것이 인터리브된 상태로 보임. 병렬 작업에는 `--fork-session`으로 각 터미널에 독립 세션을 부여
 
 ### 브랜치 작업
 
@@ -100,7 +100,15 @@ claude --continue --fork-session
 1. 이전 도구 출력 제거
 2. 대화 요약
 
-대화 초반 지침은 손실될 수 있으므로 지속적인 규칙은 CLAUDE.md에 기록한다. `/context`로 현재 사용량 확인, `/compact focus on <내용>`으로 포커스 지정 압축 가능.
+대화 초반 지침은 손실될 수 있으므로 지속적인 규칙은 CLAUDE.md에 기록한다.
+- `/context`로 현재 사용량 확인
+- `/compact focus on <내용>`으로 포커스 지정 압축 가능
+- CLAUDE.md에 "Compact Instructions" 섹션을 추가하면 압축 중 보존되는 것을 제어할 수 있음
+- `/mcp`를 실행하여 서버별 컨텍스트 비용 확인 가능
+
+**Skills와 Subagents로 컨텍스트 관리:**
+- Skills의 경우 `disable-model-invocation: true`를 설정하면 수동 호출 전까지 설명이 컨텍스트에 로드되지 않아 비용 0
+- Subagents는 주 대화와 완전히 분리된 새로운 컨텍스트 윈도우를 사용하므로 작업이 컨텍스트를 부풀리지 않음
 
 ## 안전 메커니즘
 
