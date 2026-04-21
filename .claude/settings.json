@@ -59,5 +59,6 @@
     "skill-creator@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true
   },
-  "plansDirectory": "docs/plans"
+  "plansDirectory": "docs/plans",
+  "showThinkingSummaries": true
 }
