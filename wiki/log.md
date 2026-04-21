@@ -12,3 +12,7 @@
 ## [2026-04-21] ingest | claude-code-context-window.md
 ## [2026-04-21] ingest | claude code의 일반적인 워크플로우.md
 ## [2026-04-21] ingest | claude code 모범 사례.md
+
+## [2026-04-21] ingest | claude code 권한 모드 선택.md
+## [2026-04-21] ingest | claude code 명령어.md
+## [2026-04-21] ingest | claude-code-automate-with-hooks.md

@@ -86,3 +86,4 @@ CLAUDE.md는 "항상 X 규칙"에, Skill은 전체 API 스타일 가이드처럼
 
 - [[wiki/ai/claude-code/claude-code-작동방식-에이전트하네스]]
 - [[wiki/ai/claude-code/claude-code-메모리-CLAUDE-md]]
+- [[wiki/ai/claude-code/claude-code-hooks-자동화가이드]]
