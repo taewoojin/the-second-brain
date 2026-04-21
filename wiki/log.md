@@ -20,3 +20,8 @@
 ## [2026-04-21] ingest | claude-code-directory-guide.md
 ## [2026-04-21] ingest | claude code 환경 변수.md
 ## [2026-04-21] ingest | claude code의 작동 방식.md
+
+## [2026-04-21] ingest | claude가 프로젝트를 기억하는 방법.md
+기존 claude-code-메모리-CLAUDE-md 업데이트: CLAUDE_CODE_NEW_INIT=1, CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD, InstructionsLoaded hook 디버깅, HTML 블록 주석 자동 제거, MEMORY.md 200줄 제한 vs CLAUDE.md 전체 로드 명확화
+## [2026-04-21] ingest | claude-code-custom-subagent.md
+신규 페이지 생성: wiki/ai/claude-code/claude-code-서브에이전트-구성.md — frontmatter 전체 필드, 모델 해결 우선순위, 도구 제어, 권한 모드, hooks, persistent memory, MCP 범위 지정, 호출 패턴

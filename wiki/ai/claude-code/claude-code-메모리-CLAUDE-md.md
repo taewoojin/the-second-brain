@@ -42,7 +42,7 @@
 | "변경 사항을 테스트합니다" | "커밋하기 전에 `npm test` 실행" |
 | "파일을 정리된 상태로 유지합니다" | "API 핸들러는 `src/api/handlers/`에 있습니다" |
 
-**초기 설정**: `/init` 실행 시 코드베이스를 분석하여 빌드 명령, 테스트 지침, 프로젝트 규칙을 포함한 CLAUDE.md를 자동 생성한다.
+**초기 설정**: `/init` 실행 시 코드베이스를 분석하여 빌드 명령, 테스트 지침, 프로젝트 규칙을 포함한 CLAUDE.md를 자동 생성한다. `CLAUDE_CODE_NEW_INIT=1` 설정 시 대화형 다단계 흐름으로 전환—CLAUDE.md·skills·hooks 아티팩트를 순차적으로 설정하고 제안을 검토한 후 파일을 작성한다.
 
 ### 추가 파일 가져오기
 
@@ -110,6 +110,20 @@ paths:
 
 심볼릭 링크 지원: `ln -s ~/shared-claude-rules .claude/rules/shared`
 
+### HTML 블록 주석 자동 제거
+
+CLAUDE.md 파일의 블록 수준 HTML 주석(`<!-- maintainer notes -->`)은 Claude의 컨텍스트에 주입되기 전 자동으로 제거된다. 컨텍스트 토큰을 소비하지 않고 사람 유지보수자용 메모를 남길 때 활용한다. 코드 블록 내부 주석은 보존되며, Read 도구로 직접 파일을 열면 주석이 그대로 표시된다.
+
+### 추가 디렉토리에서 CLAUDE.md 로드
+
+`--add-dir` 플래그로 추가된 디렉토리는 기본적으로 CLAUDE.md를 로드하지 않는다. 추가 디렉토리의 CLAUDE.md도 로드하려면 `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1` 환경변수를 설정한다:
+
+```bash
+CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 claude --add-dir ../shared-config
+```
+
+이 설정은 `CLAUDE.md`, `.claude/CLAUDE.md`, `.claude/rules/*.md`를 모두 포함하여 로드한다.
+
 ### 사용자 수준 규칙
 
 `~/.claude/rules/`의 규칙은 모든 프로젝트에 적용된다. 프로젝트별이 아닌 개인 선호도에 사용.
@@ -132,7 +146,7 @@ Claude가 작업하면서 자동으로 저장하는 노트:
 └── ...                # Claude가 만드는 다른 주제 파일
 ```
 
-**로드 규칙**: `MEMORY.md`의 처음 200줄 또는 25KB(먼저 도달하는 것) → 임계값 초과분은 세션 시작 시 로드되지 않음. 주제 파일(debugging.md 등)은 시작 시 로드되지 않고 필요할 때 Claude가 직접 읽음.
+**로드 규칙**: `MEMORY.md`의 처음 200줄 또는 25KB(먼저 도달하는 것) → 임계값 초과분은 세션 시작 시 로드되지 않음. 주제 파일(debugging.md 등)은 시작 시 로드되지 않고 필요할 때 Claude가 직접 읽음. 이 200줄 제한은 `MEMORY.md`에만 적용되며, CLAUDE.md 파일은 길이에 관계없이 전체 로드된다(단, 짧을수록 준수율이 높아짐).
 
 **범위**: 컴퓨터 로컬. 동일 git 저장소 내 모든 worktree와 하위 디렉토리는 하나의 auto memory 공유.
 
@@ -186,7 +200,7 @@ Claude가 작업하면서 자동으로 저장하는 노트:
 
 | 증상 | 해결 방법 |
 | --- | --- |
-| Claude가 CLAUDE.md를 따르지 않음 | `/memory` 실행 → 파일 로드 여부 확인. 지침 더 구체적으로 작성. 충돌 규칙 제거. |
+| Claude가 CLAUDE.md를 따르지 않음 | `/memory` 실행 → 파일 로드 여부 확인. 지침 더 구체적으로 작성. 충돌 규칙 제거. `InstructionsLoaded` hook으로 로드된 파일·시기·이유를 정확히 기록 (경로별 규칙·지연 로드 파일 디버깅에 유용). |
 | Auto memory 내용 불명확 | `/memory` → auto memory 폴더 선택하여 탐색 |
 | CLAUDE.md가 너무 큼 | `@path` 가져오기로 분리, `.claude/rules/`로 분할 |
 | `/compact` 후 지침 손실 | 대화에만 있던 지침이 손실됨. CLAUDE.md에 명시적으로 추가 필요 |
